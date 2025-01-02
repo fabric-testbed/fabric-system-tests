@@ -94,7 +94,7 @@ class SliceHelper:
                                                      image="docker_rocky_8")
 
                         node.add_fabnet(net_type="IPv4", nic_type='NIC_Basic')
-                        node.add_post_boot_upload_directory('node_tools', '.')
+                        node.add_post_boot_upload_directory('../../scripts/node_tools', '.')
                         node.add_post_boot_execute('sudo node_tools/host_tune.sh')    
                         node.add_post_boot_execute('node_tools/enable_docker.sh {{ _self_.image }} ')
 
@@ -274,7 +274,7 @@ class SliceHelper:
                                                       "--network host "
                                                       f"{self.docker_image} "
                                                       f"iperf3 -c {source_addr} -P 4 -t {run_time} -i 10 -O 10", 
-                                                      quiet=True, output_file=f"{run_name}.out")
+                                                      quiet=True, output_file=f"{run_name}.log")
 
                     lines = stdout2.splitlines()
 

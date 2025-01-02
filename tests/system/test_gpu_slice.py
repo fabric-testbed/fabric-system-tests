@@ -113,7 +113,7 @@ class GpuSliceTest(BaseTest):
         stdout, stderr = node.execute("nvidia-smi")
         self.assertEqual("", stderr, "nvidia-smi  failed")
 
-        node.upload_file('gpu_files/hello-world.cu', 'hello-world.cu')
+        node.upload_file('../../scripts/gpu_files/hello-world.cu', 'hello-world.cu')
         stdout, stderr = node.execute(f"/usr/local/cuda-{version}/bin/nvcc -o hello_world hello-world.cu")
         self.assertEqual("", stderr, "hello world build failed")
 
