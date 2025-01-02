@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+import ipaddress
 import json
 import random
 import time
@@ -216,7 +217,7 @@ class SliceHelper:
             for node in slice_object.get_nodes():
                 self.all_nodes.append(node)
 
-    def capture_failure(self, source: Node, target: Node, source_addr: str, target_addr: str):
+    def capture_failure(self, source: Node, target: Node, source_addr: ipaddress, target_addr: ipaddress):
         """
         Capture details of a failed test.
 
@@ -236,12 +237,12 @@ class SliceHelper:
             },
             "source": {
                 "name": source.get_name(),
-                "address": source_addr,
+                "address": str(source_addr),
                 "ssh_command": source.get_ssh_command()
             },
             "target": {
                 "name": target.get_name(),
-                "address": target_addr,
+                "address": str(target_addr),
                 "ssh_command": target.get_ssh_command()
             }
         }
