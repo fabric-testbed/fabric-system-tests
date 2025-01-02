@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+import json
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -32,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # manager = SliceManager(fablib, "slice_prefix", ["site1", "site2"], ["host_to_skip"], "docker_image", wait=True)
 # manager.run()
 from fabrictestbed_extensions.fablib.fablib import FablibManager
+from fabrictestbed_extensions.fablib.node import Node
 
 
 class SliceHelper:
@@ -48,6 +50,7 @@ class SliceHelper:
         self.all_slices = []
         self.all_nodes = []
         self.avoid_list = []
+        self.details_of_failed_tests = []
 
     def configure_slice(self, slice_name=None, slice_id=None):
         while not self.go_time:
@@ -183,6 +186,32 @@ class SliceHelper:
             for node in slice_object.get_nodes():
                 self.all_nodes.append(node)
 
+    def capture_failure(self, source: Node, target: Node, source_addr: str, target_addr: str):
+        failed_test_detail = {
+            "slice": {
+                "name": source.get_slice().get_name(),
+                "id": source.get_slice().get_slice_id()
+            },
+            "source": {
+                "name": source.get_name(),
+                "address": source_addr,
+                "ssh_command": source.get_ssh_command()
+            },
+            "target": {
+                "name": target.get_name(),
+                "address": target_addr,
+                "ssh_command": target.get_ssh_command()
+            }
+        }
+
+        # Append to the global list
+        self.details_of_failed_tests.append(failed_test_detail)
+
+    # After all tests, dump the captured details to a JSON file
+    def dump_failed_tests_to_json(self, file_path="failed_tests.json"):
+        with open(file_path, "w") as json_file:
+            json.dump(self.details_of_failed_tests, json_file, indent=4)
+
     def run_tests(self, run_iperf: bool = False, run_time: int = 30):
         with ThreadPoolExecutor(max_workers=5) as executor:
             future_tasks = {}
@@ -213,11 +242,14 @@ class SliceHelper:
                     if stdout2a == '0':
                         print(f"Success!")
                     else:
-                        print(f"Fail!!, slice: {source.get_slice().get_name()}")
+                        print(f"Fail!!, slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()}")
                         print(f"Source: {source.get_name()}: {source_addr}")
                         print(f"{source.get_ssh_command()}")
                         print(f"Target: {target.get_name()}: {target_addr}")
                         print(f"{target.get_ssh_command()}")
+
+                        self.capture_failure(source=source, source_addr=source_addr, target=target,
+                                             target_addr=target_addr)
 
                         slice_object = source.get_slice()
                         slice_object.show()
@@ -262,8 +294,13 @@ class SliceHelper:
                     print(e)
                     continue
 
+        if len(self.details_of_failed_tests):
+            self.dump_failed_tests_to_json()
+            return False
+
+        return True
+
     def run(self, run_iperf: bool = False):
         self.create_and_submit_slices()
         self.process_slices()
-        self.run_tests(run_iperf=run_iperf)
-        print("Done!")
+        return self.run_tests(run_iperf=run_iperf)
