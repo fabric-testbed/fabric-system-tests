@@ -96,9 +96,3 @@ pytest tests/system/test_fpga_slice.py
 ## License
 This project is licensed under the MIT License. See the `LICENSE` file for details.
 
-## Contact
-For questions or contributions, please contact:
-**Komal Thareja**  
-Email: [your.email@example.com](mailto:your.email@example.com)  
-GitHub: [yourusername](https://github.com/yourusername)
-
