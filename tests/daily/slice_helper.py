@@ -271,6 +271,8 @@ class SliceHelper:
         :return: True if all tests pass, otherwise False.
         :rtype: bool
         """
+        if len(self.all_nodes) == 0:
+            return False
         with ThreadPoolExecutor(max_workers=5) as executor:
             future_tasks = {}
 
