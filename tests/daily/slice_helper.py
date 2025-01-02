@@ -250,7 +250,7 @@ class SliceHelper:
         self.details_of_failed_tests.append(failed_test_detail)
 
     # After all tests, dump the captured details to a JSON file
-    def dump_failed_tests_to_json(self, file_path="failed_tests.json"):
+    def dump_failed_tests_to_json(self, file_path="../results/failed_tests.json"):
         """
         Dump all captured failed test details to a JSON file.
 
