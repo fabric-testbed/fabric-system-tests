@@ -38,7 +38,7 @@ class iPerfTest(BaseTest):
         self._fablib.delete_all()
 
     def test_iperf3(self):
-        sites = self._fablib.get_random_sites(count=1, avoid=[])
+        sites = self._fablib.get_random_sites(count=3, avoid=[])
         #sites = self._fablib.get_site_names()
         sites.sort()
         print(f"Sites: {sites}")
@@ -50,4 +50,4 @@ class iPerfTest(BaseTest):
                                    docker_image=self.docker_image,
                                    wait=False)
 
-        self.assertTrue(slice_helper.run())
+        self.assertTrue(slice_helper.run(run_iperf=True))
