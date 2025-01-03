@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import ipaddress
+import os
 import socket
 import time
 import unittest
@@ -35,7 +36,8 @@ class BaseTest(unittest.TestCase):
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
         slice_name = f"ST-Slice-{self.prefix}-{time_stamp}-{host}"
-        self._fablib = fablib_manager()
+        fabric_rc_location = os.getenv("FABRIC_RC_LOCATION")
+        self._fablib = fablib_manager(fabric_rc=fabric_rc_location)
         self._slice = self._fablib.new_slice(name=slice_name)
 
     def check_slice(self, node_cnt: int = 0, network_cnt: int = 0):
