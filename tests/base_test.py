@@ -22,22 +22,22 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import ipaddress
+import os
 import socket
 import time
 import unittest
 
-from fabrictestbed_extensions.fablib.constants import Constants
 from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 from fabrictestbed_extensions.fablib.node import Node
 
 
 class BaseTest(unittest.TestCase):
     def setUp(self):
-        #Constants.DEFAULT_FABRIC_CONFIG_DIR = f"{Constants.DEFAULT_WORK_DIR}/fabric_config_dev"
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
         slice_name = f"ST-Slice-{self.prefix}-{time_stamp}-{host}"
-        self._fablib = fablib_manager()
+        fabric_rc_location = os.getenv("FABRIC_RC_LOCATION")
+        self._fablib = fablib_manager(fabric_rc=fabric_rc_location)
         self._slice = self._fablib.new_slice(name=slice_name)
 
     def check_slice(self, node_cnt: int = 0, network_cnt: int = 0):
