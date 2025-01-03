@@ -22,19 +22,34 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+import ipaddress
+import json
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-# Usage example (assuming the required `fablib` and other variables are defined):
-# fablib = ...  # Your fablib object initialization
-# manager = SliceManager(fablib, "slice_prefix", ["site1", "site2"], ["host_to_skip"], "docker_image", wait=True)
-# manager.run()
 from fabrictestbed_extensions.fablib.fablib import FablibManager
+from fabrictestbed_extensions.fablib.node import Node
 
 
 class SliceHelper:
+    """
+    A helper class to manage and interact with slices in the FABRIC testbed.
+
+    :param fablib_mgr: Manager for FABRIC slices and nodes.
+    :type fablib_mgr: FablibManager
+    :param slice_name_prefix: Prefix for slice names.
+    :type slice_name_prefix: str
+    :param sites: List of site names.
+    :type sites: list
+    :param skip_hosts: List of hosts to skip.
+    :type skip_hosts: list
+    :param docker_image: Docker image to use on nodes.
+    :type docker_image: str
+    :param wait: Whether to wait for slice actions to complete.
+    :type wait: bool
+    """
     def __init__(self, fablib_mgr: FablibManager, slice_name_prefix, sites, skip_hosts, docker_image, wait=True):
         self.go_time = False
         self.fablib_mgr = fablib_mgr
@@ -48,8 +63,19 @@ class SliceHelper:
         self.all_slices = []
         self.all_nodes = []
         self.avoid_list = []
+        self.details_of_failed_tests = []
 
     def configure_slice(self, slice_name=None, slice_id=None):
+        """
+        Configure an existing slice by its name or ID.
+
+        :param slice_name: Name of the slice.
+        :type slice_name: str, optional
+        :param slice_id: ID of the slice.
+        :type slice_id: str, optional
+        :return: Configured slice object.
+        :rtype: Slice
+        """
         while not self.go_time:
             time.sleep(30)
 
@@ -68,6 +94,10 @@ class SliceHelper:
         return slice_object
 
     def create_and_submit_slices(self):
+        """
+        Create and submit slices based on the sites and hosts provided.
+        Uses a ThreadPoolExecutor to handle multiple slices concurrently.
+        """
         with ThreadPoolExecutor(max_workers=10) as executor:
             for index, site in enumerate(self.sites):
                 host_count = self.fablib_mgr.get_resources().get_host_capacity(site)
@@ -91,7 +121,7 @@ class SliceHelper:
                                                      image="docker_rocky_8")
 
                         node.add_fabnet(net_type="IPv4", nic_type='NIC_Basic')
-                        node.add_post_boot_upload_directory('node_tools', '.')
+                        node.add_post_boot_upload_directory('../scripts/node_tools', '.')
                         node.add_post_boot_execute('sudo node_tools/host_tune.sh')    
                         node.add_post_boot_execute('node_tools/enable_docker.sh {{ _self_.image }} ')
 
@@ -117,6 +147,10 @@ class SliceHelper:
                 print(f"************ Configure {slice_object.get_name()}, done! **************** ")
 
     def process_slices(self):
+        """
+        Process all slices to ensure they are in a stable state.
+        Lists nodes, networks, and interfaces for each slice.
+        """
         print(f"slice count: {len(self.slice_ids)}")
         for slice_id in self.slice_ids:  
             try:
@@ -183,11 +217,67 @@ class SliceHelper:
             for node in slice_object.get_nodes():
                 self.all_nodes.append(node)
 
+    def capture_failure(self, source: Node, target: Node, source_addr: ipaddress, target_addr: ipaddress):
+        """
+        Capture details of a failed test.
+
+        :param source: The source node.
+        :type source: Node
+        :param target: The target node.
+        :type target: Node
+        :param source_addr: The IP address of the source node.
+        :type source_addr: str
+        :param target_addr: The IP address of the target node.
+        :type target_addr: str
+        """
+        failed_test_detail = {
+            "slice": {
+                "name": source.get_slice().get_name(),
+                "id": source.get_slice().get_slice_id()
+            },
+            "source": {
+                "name": source.get_name(),
+                "address": str(source_addr),
+                "ssh_command": source.get_ssh_command()
+            },
+            "target": {
+                "name": target.get_name(),
+                "address": str(target_addr),
+                "ssh_command": target.get_ssh_command()
+            }
+        }
+
+        # Append to the global list
+        self.details_of_failed_tests.append(failed_test_detail)
+
+    # After all tests, dump the captured details to a JSON file
+    def dump_failed_tests_to_json(self, file_path="../results/failed_tests.json"):
+        """
+        Dump all captured failed test details to a JSON file.
+
+        :param file_path: File path for the JSON output.
+        :type file_path: str
+        """
+        with open(file_path, "w") as json_file:
+            json.dump(self.details_of_failed_tests, json_file, indent=4)
+
     def run_tests(self, run_iperf: bool = False, run_time: int = 30):
+        """
+        Run tests between nodes in the slices.
+
+        :param run_iperf: Whether to run iperf tests.
+        :type run_iperf: bool
+        :param run_time: Duration for iperf tests, in seconds.
+        :type run_time: int
+        :return: True if all tests pass, otherwise False.
+        :rtype: bool
+        """
+        if len(self.all_nodes) == 0:
+            return False
         with ThreadPoolExecutor(max_workers=5) as executor:
             future_tasks = {}
 
-            for i in range(10):
+            for i in range(min(len(self.all_nodes), 400)):
                 try:
                     source = random.choice(self.all_nodes)
                     target = random.choice(self.all_nodes)
@@ -213,11 +303,14 @@ class SliceHelper:
                     if stdout2a == '0':
                         print(f"Success!")
                     else:
-                        print(f"Fail!!, slice: {source.get_slice().get_name()}")
+                        print(f"Fail!!, slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()}")
                         print(f"Source: {source.get_name()}: {source_addr}")
                         print(f"{source.get_ssh_command()}")
                         print(f"Target: {target.get_name()}: {target_addr}")
                         print(f"{target.get_ssh_command()}")
+
+                        self.capture_failure(source=source, source_addr=source_addr, target=target,
+                                             target_addr=target_addr)
 
                         slice_object = source.get_slice()
                         slice_object.show()
@@ -242,11 +335,11 @@ class SliceHelper:
                                                       "--network host "
                                                       f"{self.docker_image} "
                                                       f"iperf3 -c {source_addr} -P 4 -t {run_time} -i 10 -O 10", 
-                                                      quiet=True, output_file=f"{run_name}.out")
+                                                      quiet=True, output_file=f"../results/{run_name}.log")
 
                     lines = stdout2.splitlines()
 
-                    with open('summary.txt', 'a') as file:
+                    with open('../results/summary.txt', 'a') as file:
                         file.write(run_name + "\n")
                         file.write(str(stdout2a) + "\n")
 
@@ -262,8 +355,21 @@ class SliceHelper:
                     print(e)
                     continue
 
+        if len(self.details_of_failed_tests):
+            self.dump_failed_tests_to_json()
+            return False
+
+        return True
+
     def run(self, run_iperf: bool = False):
+        """
+        Run the full workflow: create slices, process slices, and run tests.
+
+        :param run_iperf: Whether to include iperf tests.
+        :type run_iperf: bool
+        :return: True if all steps succeed, otherwise False.
+        :rtype: bool
+        """
         self.create_and_submit_slices()
         self.process_slices()
-        self.run_tests(run_iperf=run_iperf)
-        print("Done!")
+        return self.run_tests(run_iperf=run_iperf)

@@ -50,4 +50,4 @@ class iPerfTest(BaseTest):
                                    docker_image=self.docker_image,
                                    wait=False)
 
-        slice_helper.run()
+        self.assertTrue(slice_helper.run(run_iperf=True))
