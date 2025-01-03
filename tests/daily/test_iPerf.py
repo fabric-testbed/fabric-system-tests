@@ -30,7 +30,7 @@ from tests.daily.slice_helper import SliceHelper
 
 class iPerfTest(BaseTest):
     def setUp(self):
-        self.prefix = "Ping"
+        self.prefix = "iPerf"
         self.wait = False
         self.skip_hosts = []
         self.docker_image = 'pruth/fabric-multitool-rockylinux9:latest'
