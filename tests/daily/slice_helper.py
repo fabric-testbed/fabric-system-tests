@@ -317,13 +317,16 @@ class SliceHelper:
                                 print(f"{slice_object.get_name()} not found")
                                 print(e)
 
+                        '''
                         slice_object = source.get_slice()
                         slice_object.show()
                         slice_object.list_nodes()
                         slice_object.list_networks()
                         slice_object.list_interfaces()
+                        '''
 
-                        print(f"Fail!!, slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()}")
+                        print(f"Fail!!, Source slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()} "
+                              f"Target Slice: {target.get_slice().get_name()}/{target.get_slice().get_slice_id()}")
                         print(f"Source: {source.get_name()}: {source_addr}")
                         print(f"{source.get_ssh_command()}")
                         print(f"Target: {target.get_name()}: {target_addr}")
