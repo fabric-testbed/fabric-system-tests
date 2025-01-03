@@ -33,7 +33,7 @@ from fabrictestbed_extensions.fablib.node import Node
 
 class BaseTest(unittest.TestCase):
     def setUp(self):
-        #Constants.DEFAULT_FABRIC_CONFIG_DIR = f"{Constants.DEFAULT_WORK_DIR}/fabric_config_dev"
+        Constants.DEFAULT_FABRIC_CONFIG_DIR = f"{Constants.DEFAULT_WORK_DIR}/fabric_config_dev"
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
         slice_name = f"ST-Slice-{self.prefix}-{time_stamp}-{host}"
