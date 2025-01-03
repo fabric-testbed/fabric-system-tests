@@ -26,13 +26,14 @@ import socket
 import time
 import unittest
 
+from fabrictestbed_extensions.fablib.constants import Constants
 from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 from fabrictestbed_extensions.fablib.node import Node
 
 
 class BaseTest(unittest.TestCase):
     def setUp(self):
-        # Create a slice
+        #Constants.DEFAULT_FABRIC_CONFIG_DIR = f"{Constants.DEFAULT_WORK_DIR}/fabric_config_dev"
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
         slice_name = f"ST-Slice-{self.prefix}-{time_stamp}-{host}"
