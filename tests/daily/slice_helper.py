@@ -288,7 +288,7 @@ class SliceHelper:
                     run_name = f"run_{source.get_name()}_{target.get_name()}"
                     print(f"({i}) Running: {run_name} \t", end="")
 
-                    if run_iperf:
+                    if run_iperf and source != target:
                         stdout1, stderr1 = source.execute("docker run -d --rm "
                                                           "--network host "
                                                           f"{self.docker_image} "
@@ -303,7 +303,31 @@ class SliceHelper:
                     if stdout2a == '0':
                         print(f"Success!")
                     else:
-                        print(f"Fail!!, slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()}")
+
+                        slice_object = source.get_slice()
+                        if source == target:
+                            source.get_slice().post_boot_config()
+                            stdout2a, stderr2a = target.execute(f"ping -c 10 {target_addr} > /dev/null ", quiet=False)
+                            print(f"Skip!!, {source} == {target}")
+                            continue
+                        else:
+                            try:
+                                future_tasks[executor.submit(self.configure_slice, slice_id=source.get_slice().get_slice_id())] = slice_object
+                            except Exception as e:
+                                print(f"{slice_object.get_name()} not found")
+                                print(e)
+
+                        '''
+                        slice_object = source.get_slice()
+                        slice_object.show()
+                        slice_object.list_nodes()
+                        slice_object.list_networks()
+                        slice_object.list_interfaces()
+                        '''
+
+                        print(f"Fail!!")
+                        print(f"Source slice: {source.get_slice().get_name()}/{source.get_slice().get_slice_id()} "
+                              f"Target Slice: {target.get_slice().get_name()}/{target.get_slice().get_slice_id()}")
                         print(f"Source: {source.get_name()}: {source_addr}")
                         print(f"{source.get_ssh_command()}")
                         print(f"Target: {target.get_name()}: {target_addr}")
@@ -311,22 +335,6 @@ class SliceHelper:
 
                         self.capture_failure(source=source, source_addr=source_addr, target=target,
                                              target_addr=target_addr)
-
-                        slice_object = source.get_slice()
-                        slice_object.show()
-                        slice_object.list_nodes()
-                        slice_object.list_networks()
-                        slice_object.list_interfaces()
-
-                        if source == target:
-                            source.get_slice().post_boot_config()
-                            stdout2a, stderr2a = target.execute(f"ping -c 10 {target_addr} > /dev/null ", quiet=False)
-                        else:
-                            try:
-                                future_tasks[executor.submit(self.configure_slice, slice_id=source.get_slice().get_slice_id())] = slice_object
-                            except Exception as e:
-                                print(f"{slice_object.get_name()} not found")
-                                print(e)
 
                     if not run_iperf:
                         continue
