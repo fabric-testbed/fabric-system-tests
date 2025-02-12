@@ -277,7 +277,7 @@ class SliceHelper:
         with ThreadPoolExecutor(max_workers=5) as executor:
             future_tasks = {}
 
-            for i in range(min(len(self.all_nodes), 400)):
+            for i in range(int(len(self.all_nodes)/2)):
                 try:
                     source = random.choice(self.all_nodes)
                     target = random.choice(self.all_nodes)
