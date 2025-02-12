@@ -55,6 +55,8 @@ fabric-system-tests/
 
 ### Running Tests
 
+NOTE: Running tests locally, uncomment and update `os.environ['FABRIC_RC_LOCATION']` in `tests/base_test.py` accordingly.
+
 #### Daily Tests
 Run the daily tests located in the `tests/daily/` directory:
 ```bash

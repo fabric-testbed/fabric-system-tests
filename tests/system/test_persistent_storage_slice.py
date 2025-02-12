@@ -33,7 +33,7 @@ class PersistentStorageSliceTest(BaseTest):
 
     def test_slice(self):
         site = 'EDC'
-        storage_name = f'FABRIC_Staff_star_50G_1'
+        storage_name = f'acceptance-testing'
 
         # Add a node
         node = self._slice.add_node(name="Node1", site=site)
