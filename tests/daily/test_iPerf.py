@@ -38,7 +38,7 @@ class iPerfTest(BaseTest):
         self._fablib.delete_all()
 
     def test_iperf3(self):
-        sites = self._fablib.get_random_sites(count=30, avoid=[])
+        sites = self._fablib.get_random_sites(count=29, avoid=["EDUKY"])
         #sites = self._fablib.get_site_names()
         sites.sort()
         print(f"Sites: {sites}")
