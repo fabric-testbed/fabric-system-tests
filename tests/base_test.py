@@ -34,7 +34,7 @@ from threading import Lock
 
 fim_lock = Lock()
 
-DEBUG = True
+DEBUG = False
 if not DEBUG:
     fabric_rc = None
     os.environ['FABRIC_AVOID'] = 'EDUKY'
