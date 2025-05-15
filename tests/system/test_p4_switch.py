@@ -31,8 +31,8 @@ from tests.base_test import BaseTest
 from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 
 
-class P4SwitchSliceTest:
-    def __init__(self):
+class P4SwitchSliceTest(BaseTest):
+    def setUp(self):
         self.prefix = "P4Switch"
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
@@ -40,8 +40,7 @@ class P4SwitchSliceTest:
         fabric_rc_location = os.getenv("FABRIC_RC_LOCATION")
         self._fablib = fablib_manager(fabric_rc=fabric_rc_location)
         self._slice = self._fablib.new_slice(name=slice_name)
-
-        #super(P4SwitchSliceTest, self).setUp()
+        super(P4SwitchSliceTest, self).setUp()
 
     def p4_slice(self):
         p4_column_name = 'p4-switch_available'
@@ -94,7 +93,7 @@ class P4SwitchSliceTest:
         self.check_slice(node_cnt=3, network_cnt=2)
         # VERIFICATION
 
-        #self._slice.delete()
+        self._slice.delete()
 
 
 if __name__ == '__main__':

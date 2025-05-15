@@ -24,25 +24,37 @@
 # Author: Komal Thareja (kthare10@renci.org)
 
 from tests.base_test import BaseTest
-from tests.acceptance.acceptance_test import AcceptanceTest
 
 
-class TestComponents(BaseTest):
+class SmartNicSliceTest(BaseTest):
     def setUp(self):
-        self.prefix = "iPerf"
-        self.wait = False
-        self.skip_hosts = []
-        self.docker_image = 'pruth/fabric-multitool-rockylinux9:latest'
-        super(TestComponents, self).setUp()
-        self._fablib.delete_all()
+        self.prefix = "Nvme"
+        super(SmartNicSliceTest, self).setUp()
 
-    def test_components(self):
-        sites = self._fablib.get_random_sites(count=3, avoid=[])
-        #sites = self._fablib.get_site_names()
-        sites.sort()
-        print(f"Sites: {sites}")
+    def test_slice(self):
+        site = self._fablib.get_random_site(filter_function=lambda x: x['nvme_available'] > 0)
+        print(f"site: {site}")
 
-        acceptance_test = AcceptanceTest(fablib_mgr=self._fablib, slice_name_prefix=self.prefix, sites=sites,
-                                         skip_hosts=self.skip_hosts, docker_image=self.docker_image, wait=False)
+        node_name = 'Node1'
 
-        self.assertTrue(acceptance_test.run(run_iperf=True))
+        # Add node
+        node = self._slice.add_node(name=node_name, site=site)
+
+        # Add an NVME Drive
+        node.add_component(model='NIC_Basic', name='nic1')
+        node.add_component(model='NIC_ConnectX_6', name='nic2')
+
+        # Submit Slice Request
+        self._slice.submit()
+
+        # VERIFICATION
+        self._slice.update()
+        self.check_slice(node_cnt=1, network_cnt=0)
+
+        node = self._slice.get_node(node_name)
+
+        # VERIFICATION
+        node.execute("sudo dnf install -y pciutils")
+        node.execute("sudo lspci")
+
+        self._slice.delete()

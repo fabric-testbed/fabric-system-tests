@@ -30,7 +30,8 @@ import unittest
 from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 from fabrictestbed_extensions.fablib.node import Node
 
-#os.environ['FABRIC_RC_LOCATION'] = '/Users/kthare10/work/fabric_config/fabric_rc'
+#os.environ['FABRIC_RC_LOCATION'] = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+#os.environ['FABRIC_AVOID'] = 'UKY'
 
 
 class BaseTest(unittest.TestCase):

@@ -38,7 +38,10 @@ class iPerfTest(BaseTest):
         self._fablib.delete_all()
 
     def test_iperf3(self):
-        sites = self._fablib.get_random_sites(count=30, avoid=[])
+        site_count = 2
+        if "orchestrator" in self._fablib.get_orchestrator_host():
+            site_count = 30
+        sites = self._fablib.get_random_sites(count=site_count, avoid=[])
         #sites = self._fablib.get_site_names()
         sites.sort()
         print(f"Sites: {sites}")
