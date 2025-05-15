@@ -10,27 +10,10 @@ fabric-system-tests/
 ├── tests/
 │   ├── base_test.py       # Base class for common test utilities
 │   ├── __init__.py        # Package initializer
-│   ├── daily/             # Daily regression and validation tests
-│   │   ├── slice_helper.py   # Helper functions for managing slices
-│   │   ├── test_iPerf.py     # Tests for iPerf performance
-│   │   ├── output/           # Directory for test output files
-│   │   ├── __init__.py       # Package initializer for daily tests
-│   │   ├── node_tools/       # Utility scripts for node management
-│   └── system/            # System-level validation tests
-│       ├── test_fpga_slice.py                   # FPGA slice validation
-│       ├── test_persistent_storage_slice.py     # Persistent storage slice tests
-│       ├── test_l2ptp_slice.py                  # L2 point-to-point slice tests
-│       ├── test_l2bridge_slice.py               # L2 bridge slice tests
-│       ├── test_l2sts_slice.py                  # L2 stitched slice tests
-│       ├── test_nvme_slice.py                   # NVMe slice validation
-│       ├── test_fabnet_v6_ext.py                # IPv6 external FABNet tests
-│       ├── test_fabnet_v4_ext_renew_slice.py    # IPv4 external FABNet slice renewal
-│       ├── test_gpu_slice.py                    # GPU slice validation
-│       ├── test_mf_lib_slice.py                 # Managed file library slice tests
-│       ├── test_modify_slice.py                 # Slice modification tests
-│       ├── test_l3rt_slice.py                   # L3 route slice validation
-│       ├── test_al2s_slice.py                   # AL2S slice validation
-│       └── gpu_files/                           # Supporting files for GPU tests
+│   ├── acceptance/        # Acceptance Tests to validate Sites after release upgrade   
+│   ├── daily/             # Daily Regression Test
+│   └── system/            # System-level validation tests to validate new features
+
 ```
 
 ## Getting Started
@@ -55,7 +38,13 @@ fabric-system-tests/
 
 ### Running Tests
 
-NOTE: Running tests locally, uncomment and update `os.environ['FABRIC_RC_LOCATION']` in `tests/base_test.py` accordingly.
+NOTE: Running tests locally, update `DEBUG=TRUE` and `fabric_rc` to point to the correct path in `tests/base_test.py` accordingly.
+
+#### Acceptance Tests
+Run the daily tests located in the `tests/acceptance/` directory:
+```bash
+pytest tests/acceptance
+```
 
 #### Daily Tests
 Run the daily tests located in the `tests/daily/` directory:
