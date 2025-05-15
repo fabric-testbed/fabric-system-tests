@@ -56,7 +56,7 @@ class NvmeSliceTest(BaseTest):
         nvme1 = node.get_component(nvme_name)
         self.assertIsNotNone(nvme1, "NVME not found")
 
-        nvme1.configure_nvme();
+        nvme1.configure_nvme()
         # VERIFICATION
 
         self._slice.delete()
