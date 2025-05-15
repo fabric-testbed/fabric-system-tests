@@ -6,8 +6,8 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 fabric_rc = None
-fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
-os.environ['FABRIC_AVOID'] = 'UKY'
+#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+#os.environ['FABRIC_AVOID'] = 'UKY'
 
 GPU_MODELS = {
     'GPU_TeslaT4': 'tesla_t4_capacity',
