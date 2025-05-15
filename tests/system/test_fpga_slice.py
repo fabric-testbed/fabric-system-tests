@@ -47,7 +47,6 @@ class FpgaSliceTest(BaseTest):
 
         # you can limit to one of the sites on this list (or use None)
         # allowed_sites = ['MAX', 'INDI']
-        allowed_sites = None
 
         fpga_sites_df = self._fablib.list_sites(output='pandas', quiet=True, filter_function=lambda x: x[column_name] > 0)
         # note that list_sites with 'pandas' doesn't actually return a dataframe like doc sez, it returns a Styler

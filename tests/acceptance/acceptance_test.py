@@ -33,7 +33,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from fabrictestbed_extensions.fablib.node import Node
 
 
-class AcceptSliceHelper:
+class AcceptanceTest:
     """
     A helper class to manage and interact with slices in the FABRIC testbed.
 
@@ -102,7 +102,7 @@ class AcceptSliceHelper:
             for index, site in enumerate(self.sites):
                 host_count = self.fablib_mgr.get_resources().get_host_capacity(site)
                 site_obj = self.fablib_mgr.get_resources().get_site(site)
-                for host_name, host in site_obj.get_hosts():
+                for host_name, host in site_obj.get_hosts().items():
                     slice_name = f"{self.slice_name_prefix}_{host_name}"
                     slice_object = self.fablib_mgr.new_slice(name=slice_name)
                     if host_name in self.skip_hosts:
@@ -118,9 +118,11 @@ class AcceptSliceHelper:
                                                  disk=100,
                                                  image="default_ubuntu_24")
 
-                    for c in host.get_components():
-                        node.add_component(model=c., name=)
-
+                    idx = 0
+                    for key, c in host.get_components().items():
+                        print(c.model)
+                        print(c.type)
+                        node.add_component(model=f"{c.type}_{c.model}", name=f"{host_name}-{c.type}-{idx}")
                     try:
                         slice_object.validate()
                     except Exception as e:
