@@ -26,7 +26,8 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_shared_nic_slice(fablib, site):
+def create_shared_nic_slice(site):
+    fablib = FablibManager(fabric_rc=fabric_rc)
     site_name = site["name"]
     slice_name = f"test-312-sharednic-{site_name.lower()}-{int(time.time())}"
     print(f"[{site_name}] Creating Shared NIC slice: {slice_name}")
@@ -59,7 +60,7 @@ def test_create_shared_nic_vms_per_site(fablib):
             # Check if shared NICs are available (assume capacity key is known)
             if site.get("nic_basic_capacity", 0) == 0:
                 continue
-            future = executor.submit(create_shared_nic_slice, fablib, site)
+            future = executor.submit(create_shared_nic_slice, site)
             future_to_site[future] = site["name"]
 
         slice_objects = {}

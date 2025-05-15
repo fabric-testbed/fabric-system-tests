@@ -29,7 +29,9 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_smartnic_slice(fablib, site, nic_model):
+def create_smartnic_slice(site, nic_model):
+    fablib = FablibManager(fabric_rc=fabric_rc)
+
     site_name = site["name"]
     slice_name = f"test-312-smartnic-{site_name.lower()}-{nic_model.lower()}-{int(time.time())}"
     print(f"[{site_name}] Creating Smart NIC slice: {slice_name}")
@@ -60,7 +62,7 @@ def test_create_smartnic_vms_per_site(fablib):
             for nic_model, capacity_key in SMART_NIC_MODELS.items():
                 if site.get(capacity_key, 0) < 2:
                     continue
-                future = executor.submit(create_smartnic_slice, fablib, site, nic_model)
+                future = executor.submit(create_smartnic_slice, site, nic_model)
                 future_to_site_model[future] = (site["name"], nic_model)
 
         slice_objects = {}

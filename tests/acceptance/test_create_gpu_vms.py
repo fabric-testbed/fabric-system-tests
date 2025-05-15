@@ -6,8 +6,8 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 fabric_rc = None
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
-#os.environ['FABRIC_AVOID'] = 'UKY'
+fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+os.environ['FABRIC_AVOID'] = 'UKY'
 
 GPU_MODELS = {
     'GPU_TeslaT4': 'tesla_t4_capacity',
@@ -39,11 +39,12 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_and_submit_slice(fablib, site, gpu_model):
+def create_and_submit_slice(site, gpu_model):
     """
     Create and submit a slice at the given site using non-blocking submit.
     Returns the slice object.
     """
+    fablib = FablibManager(fabric_rc=fabric_rc)
     site_name = site["name"]
     slice_name = f"test-312-{site_name.lower()}-{gpu_model.lower()}-{int(time.time())}"
 
@@ -79,7 +80,7 @@ def test_create_gpu_vms_per_site(fablib):
             for gpu_model, model_key in GPU_MODELS.items():
                 if site.get(model_key, 0) == 0:
                     continue
-                future = executor.submit(create_and_submit_slice, fablib, site, gpu_model)
+                future = executor.submit(create_and_submit_slice, site, gpu_model)
                 site_name = site["name"]
                 future_to_site[future] = f"{site_name}_{gpu_model}"
 
