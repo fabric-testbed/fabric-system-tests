@@ -39,9 +39,11 @@ class iPerfTest(BaseTest):
 
     def test_iperf3(self):
         site_count = 2
+        avoid = ["UKY"]
         if "orchestrator" in self._fablib.get_orchestrator_host():
             site_count = 30
-        sites = self._fablib.get_random_sites(count=site_count, avoid=[])
+            avoid = ["EDUKY"]
+        sites = self._fablib.get_random_sites(count=site_count, avoid=avoid)
         #sites = self._fablib.get_site_names()
         sites.sort()
         print(f"Sites: {sites}")
