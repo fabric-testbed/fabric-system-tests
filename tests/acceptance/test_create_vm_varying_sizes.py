@@ -6,6 +6,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import os
 
+
+fabric_rc = None
+#os.environ['FABRIC_AVOID'] = 'UKY'
+#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+
 VM_CONFIG = {
     "cores": 4,
     "ram": 8,    # GB
@@ -14,10 +19,6 @@ VM_CONFIG = {
 
 MAX_WORKERS_PER_SITE = 1  # Limit to 1 VM per site for lightweight testing
 MAX_PARALLEL_SITES = 5    # Max number of concurrent slice creations
-
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 
 
@@ -32,11 +33,12 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_and_submit_slice(fablib, site):
+def create_and_submit_slice(site):
     """
     Create and submit a slice at the given site using non-blocking submit.
     Returns the slice object.
     """
+    fablib = FablibManager(fabric_rc=fabric_rc)
     site_name = site["name"]
     worker_count = site["hosts"]
     slice_name = f"test311-{site_name.lower()}-{int(time.time())}"
@@ -70,7 +72,7 @@ def test_non_blocking_vm_creation(fablib):
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
         future_to_site = {
-            executor.submit(create_and_submit_slice, fablib, site): site["name"]
+            executor.submit(create_and_submit_slice, site): site["name"]
             for site in sites
         }
 

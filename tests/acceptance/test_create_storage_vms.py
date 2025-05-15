@@ -27,7 +27,8 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_storage_slice(fablib, site):
+def create_storage_slice(site):
+    fablib = FablibManager(fabric_rc=fabric_rc)
     site_name = site["name"]
     worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
     slice_name = f"test-313-storage-{site_name.lower()}-{int(time.time())}"
@@ -57,7 +58,7 @@ def test_attached_storage_parallel(fablib):
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
         future_to_site = {
-            executor.submit(create_storage_slice, fablib, site): site["name"]
+            executor.submit(create_storage_slice, site): site["name"]
             for site in sites
         }
 

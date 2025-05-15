@@ -25,7 +25,8 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_nvme_slice(fablib, site):
+def create_nvme_slice(site):
+    fablib = FablibManager(fabric_rc=fabric_rc)
     site_name = site["name"]
     slice_name = f"test-312-nvme-{site_name.lower()}-{int(time.time())}"
     print(f"[{site_name}] Creating NVMe slice: {slice_name}")
@@ -57,7 +58,7 @@ def test_create_nvme_vms_per_site(fablib):
             # Check NVME_P4510 availability before submitting
             if site.get('nvme_capacity', 0) < 2:
                 continue
-            future = executor.submit(create_nvme_slice, fablib, site)
+            future = executor.submit(create_nvme_slice, site)
             future_to_site[future] = site["name"]
 
         slice_objects = {}
