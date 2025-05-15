@@ -23,6 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 import json
+import time
 import traceback
 from itertools import product
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -59,7 +60,7 @@ def create_slice(site, worker):
         with fim_lock:
             fablib = get_fablib()
 
-            slice_name = f"{SLICE_PREFIX}{site_name.lower()}-w{worker}"
+            slice_name = f"{SLICE_PREFIX}{site_name.lower()}-w{worker}-{int(time.time())}"
             slice_obj = fablib.new_slice(name=slice_name)
             node = slice_obj.add_node(name="node", site=site_name, cores=4, ram=16, disk=100, image="docker_rocky_8",
                                       host=f"{site_name.lower()}-w{worker}.fabric-testbed.net")
