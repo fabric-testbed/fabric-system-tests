@@ -4,10 +4,8 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+from tests.base_test import fabric_rc, fim_lock
 
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 NIC_MODEL = 'NIC_Basic'
 NIC_CAPACITY_FIELD = 'nic_basic_capacity'
@@ -49,28 +47,30 @@ def make_site_triplets(sites):
 
 
 def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
-    fablib = FablibManager(fabric_rc=fabric_rc)
+    with fim_lock:
 
-    slice_name = f"test-323-l2sts-{site1.lower()}-{site2.lower()}-{int(time.time())}"
-    print(f"[{site1}/{site2}] Creating L2STS slice: {slice_name}")
+        fablib = FablibManager(fabric_rc=fabric_rc)
 
-    slice_obj = fablib.new_slice(name=slice_name)
+        slice_name = f"test-323-l2sts-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        print(f"[{site1}/{site2}] Creating L2STS slice: {slice_name}")
 
-    # Node1 on site1 worker1
-    node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
-    iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        slice_obj = fablib.new_slice(name=slice_name)
 
-    # Node2 on site1 worker2
-    node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
-    iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        # Node1 on site1 worker1
+        node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
+        iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
 
-    # Node3 on site2 worker3
-    node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
-    iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+        # Node2 on site1 worker2
+        node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
+        iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
 
-    slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
-    slice_obj.submit(wait=False)
-    return slice_obj
+        # Node3 on site2 worker3
+        node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
+        iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):

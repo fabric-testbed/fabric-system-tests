@@ -1,9 +1,6 @@
 import pytest
 from fabrictestbed_extensions.fablib.fablib import FablibManager
-
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+from tests.base_test import fabric_rc
 
 
 # Mapping from remote credential manager host to expected sites

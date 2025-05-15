@@ -3,12 +3,8 @@ import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tests.base_test import fabric_rc
 
-import os
-
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
 STORAGE_NAME = "acceptance-testing"
@@ -28,19 +24,21 @@ def get_active_sites(fablib):
 
 
 def create_storage_slice(site):
-    fablib = FablibManager(fabric_rc=fabric_rc)
-    site_name = site["name"]
-    worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
-    slice_name = f"test-313-storage-{site_name.lower()}-{int(time.time())}"
-    print(f"[{site_name}] Creating slice: {slice_name}")
+    with fim_lock:
 
-    slice_obj = fablib.new_slice(name=slice_name)
-    node = slice_obj.add_node(name="storage-node", site=site_name,
-                              host=worker, cores=VM_CONFIG["cores"],
-                              ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    node.add_storage(name=STORAGE_NAME)
-    slice_obj.submit(wait=False)
-    return slice_obj
+        fablib = FablibManager(fabric_rc=fabric_rc)
+        site_name = site["name"]
+        worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
+        slice_name = f"test-313-storage-{site_name.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating slice: {slice_name}")
+
+        slice_obj = fablib.new_slice(name=slice_name)
+        node = slice_obj.add_node(name="storage-node", site=site_name,
+                                  host=worker, cores=VM_CONFIG["cores"],
+                                  ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        node.add_storage(name=STORAGE_NAME)
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):

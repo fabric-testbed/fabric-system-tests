@@ -4,13 +4,8 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+from tests.base_test import fabric_rc, fim_lock
 
-import os
-
-
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 NIC_MODEL = 'NIC_Basic'
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
@@ -32,28 +27,30 @@ def get_active_sites(fablib):
 
 
 def create_local_bridge_sharednic_slice(site):
-    fablib = FablibManager(fabric_rc=fabric_rc)
+    with fim_lock:
 
-    site_name = site["name"]
-    slice_name = f"test-321-sharednic-bridge-{site_name.lower()}-{int(time.time())}"
-    print(f"[{site_name}] Creating slice: {slice_name}")
+        fablib = FablibManager(fabric_rc=fabric_rc)
 
-    worker1 = WORKER_TEMPLATE.format(site_name.lower(), 1)
-    worker2 = WORKER_TEMPLATE.format(site_name.lower(), 2)
+        site_name = site["name"]
+        slice_name = f"test-321-sharednic-bridge-{site_name.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating slice: {slice_name}")
 
-    slice_obj = fablib.new_slice(name=slice_name)
+        worker1 = WORKER_TEMPLATE.format(site_name.lower(), 1)
+        worker2 = WORKER_TEMPLATE.format(site_name.lower(), 2)
 
-    node1 = slice_obj.add_node(name="node1", site=site_name, host=worker1,
-                               cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    iface1 = node1.add_component(model=NIC_MODEL, name="sharednic1").get_interfaces()[0]
+        slice_obj = fablib.new_slice(name=slice_name)
 
-    node2 = slice_obj.add_node(name="node2", site=site_name, host=worker2,
-                               cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    iface2 = node2.add_component(model=NIC_MODEL, name="sharednic2").get_interfaces()[0]
+        node1 = slice_obj.add_node(name="node1", site=site_name, host=worker1,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface1 = node1.add_component(model=NIC_MODEL, name="sharednic1").get_interfaces()[0]
 
-    slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
-    slice_obj.submit(wait=False)
-    return slice_obj
+        node2 = slice_obj.add_node(name="node2", site=site_name, host=worker2,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface2 = node2.add_component(model=NIC_MODEL, name="sharednic2").get_interfaces()[0]
+
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):
