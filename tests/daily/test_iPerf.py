@@ -114,7 +114,6 @@ def test_site_worker_pair_ping_iperf(fablib):
             print(f"{k}: {v}")
     else:
         print("\nAll site-worker pairs passed.")
-
-    cleanup_slices(slices)
+        cleanup_slices(slices)
 
     assert not failed, f"Some slice pairs failed: {', '.join(failed.keys())}"
