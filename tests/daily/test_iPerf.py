@@ -92,7 +92,7 @@ def test_site_worker_pair_ping_iperf(fablib):
 
         # Run iperf3 client on source
         iperf_cmd_client = f"docker run --rm --network host {DOCKER_IMAGE} " \
-                           f"iperf3 -c {dst_ip} -P 4 -t {RUN_TIME} -i 10 -O 10 -n 500M"
+                           f"iperf3 -c {dst_ip} -P 4 -t {RUN_TIME} -i 10 -O 10"
         iperf_out, iperf_err = run_remote_command(src_node, iperf_cmd_client)
 
         if "receiver" in iperf_out:
