@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+from itertools import combinations
+
 import pytest
 import traceback
 import time
@@ -60,14 +62,20 @@ def get_sites_with_smartnic_workers(fablib):
 
 
 def make_site_triplets(sites):
-    """Return site1, site2, worker1, worker2, worker3 tuples."""
+    """
+    Return all unique (site1, site2, worker1, worker2, worker3) triplets.
+    - site1 must have ≥1 worker
+    - site2 must have ≥2 workers
+    - Each pair is unique and (site1 ≠ site2)
+    """
     triplets = []
-    for i in range(len(sites) - 1):
-        site1, workers1 = sites[i]
-        site2, workers2 = sites[i + 1]
+    for (site1, workers1), (site2, workers2) in combinations(sites, 2):
         if len(workers1) >= 1 and len(workers2) >= 2:
             triplets.append((site1, site2, workers1[0], workers2[0], workers2[1]))
+        elif len(workers2) >= 1 and len(workers1) >= 2:
+            triplets.append((site2, site1, workers2[0], workers1[0], workers1[1]))
     return triplets
+
 
 
 def create_l2sts_smartnic_slice(site1, site2, w1, w2, w3):
