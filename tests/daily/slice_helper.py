@@ -23,6 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 import json
+import os
 import time
 import traceback
 from itertools import product, combinations
@@ -34,7 +35,9 @@ SLICE_PREFIX = "iperf@"
 DEFAULT_IMAGE = "default_ubuntu_22"
 NIC_MODEL = "NIC_Basic"
 MAX_PARALLEL = 4
-
+avoid = os.getenv('FABRIC_AVOID')
+if not avoid or len(avoid) == 0:
+    avoid = ["EDUKY"]
 
 def get_fablib(fabric_rc=fabric_rc):
     return FablibManager(fabric_rc=fabric_rc)
@@ -51,7 +54,7 @@ def delete_existing_slices(fablib):
 
 
 def get_sites_with_workers(fablib):
-    return [site for site in fablib.list_sites(output="list", avoid=["EDUKY"]) if site.get("state") == "Active"]
+    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
 def create_slice(site, worker):
@@ -84,6 +87,7 @@ def create_site_worker_slices(fablib, sites):
         futures = {
             executor.submit(create_slice, site, worker): (site, worker)
             for site in sites
+            if site["name"] not in avoid
             for worker in range(1, site["hosts"] + 1)
         }
         for future in as_completed(futures):
