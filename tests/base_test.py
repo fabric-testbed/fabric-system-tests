@@ -30,8 +30,17 @@ import unittest
 from fabrictestbed_extensions.fablib.fablib import FablibManager as fablib_manager
 from fabrictestbed_extensions.fablib.node import Node
 
-#os.environ['FABRIC_RC_LOCATION'] = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
-#os.environ['FABRIC_AVOID'] = 'UKY'
+from threading import Lock
+
+fim_lock = Lock()
+
+DEBUG = False
+if not DEBUG:
+    fabric_rc = None
+    os.environ['FABRIC_AVOID'] = 'EDUKY'
+else:
+    fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+    os.environ['FABRIC_AVOID'] = 'UKY'
 
 
 class BaseTest(unittest.TestCase):
@@ -39,8 +48,7 @@ class BaseTest(unittest.TestCase):
         time_stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         host = socket.gethostname()
         slice_name = f"ST-Slice-{self.prefix}-{time_stamp}-{host}"
-        fabric_rc_location = os.getenv("FABRIC_RC_LOCATION")
-        self._fablib = fablib_manager(fabric_rc=fabric_rc_location)
+        self._fablib = fablib_manager(fabric_rc=fabric_rc)
         self._slice = self._fablib.new_slice(name=slice_name)
 
     def check_slice(self, node_cnt: int = 0, network_cnt: int = 0):

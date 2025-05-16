@@ -1,13 +1,35 @@
+#!/usr/bin/env python3
+#
+# MIT License
+#
+# Copyright (c) 2023 FABRIC Testbed
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# Author: Komal Thareja (kthare10@renci.org)
 import pytest
 import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+from tests.base_test import fabric_rc, fim_lock
 
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 NIC_MODEL = 'NIC_ConnectX_5'
 NIC_CAPACITY_FIELD = 'nic_connectx_5_capacity'
@@ -49,25 +71,27 @@ def make_site_triplets(sites):
 
 
 def create_l2sts_smartnic_slice(site1, site2, w1, w2, w3):
-    fablib = FablibManager(fabric_rc=fabric_rc)
+    with fim_lock:
 
-    slice_name = f"test-323-l2sts-smartnic-{site1.lower()}-{site2.lower()}-{int(time.time())}"
-    print(f"[{site1}/{site2}] Creating L2STS SmartNIC slice: {slice_name}")
+        fablib = FablibManager(fabric_rc=fabric_rc)
 
-    slice_obj = fablib.new_slice(name=slice_name)
+        slice_name = f"test-323-l2sts-smartnic-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        print(f"[{site1}/{site2}] Creating L2STS SmartNIC slice: {slice_name}")
 
-    node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
-    iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        slice_obj = fablib.new_slice(name=slice_name)
 
-    node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
-    iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
+        iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
 
-    node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
-    iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+        node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
+        iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
 
-    slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
-    slice_obj.submit(wait=False)
-    return slice_obj
+        node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
+        iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):

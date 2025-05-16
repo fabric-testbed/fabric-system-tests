@@ -25,17 +25,17 @@
 import pytest
 import traceback
 import time
+from ipaddress import IPv6Network
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from ipaddress import IPv4Network
 from tests.base_test import fabric_rc, fim_lock
 
 
 NIC_MODEL = 'NIC_Basic'
 NIC_CAPACITY_FIELD = 'nic_basic_capacity'
-NETWORK_NAME = 'l2-STS'
-SUBNET = IPv4Network("192.168.1.0/24")
-MAX_PARALLEL = 2  # L2STS is slow to provision, keep concurrency low
+NETWORK_TYPE = 'IPv6'
+MAX_PARALLEL = 2  # Limit concurrency
+SUBNET = IPv6Network("2001:db8:abcd:0012::/64")
 
 
 @pytest.fixture(scope="module")
@@ -46,7 +46,7 @@ def fablib():
 
 
 def get_sites_with_workers(fablib):
-    """Return sites with >=2 workers and Shared NIC capacity."""
+    """Return sites with >=1 NIC and workers."""
     result = []
     for site in fablib.list_sites(output="list"):
         if site.get("state") != "Active":
@@ -54,45 +54,39 @@ def get_sites_with_workers(fablib):
         if site.get(NIC_CAPACITY_FIELD, 0) < 1:
             continue
         workers = site.get("hosts", [])
-        if len(workers) >= 2:
+        if len(workers) >= 1:
             result.append((site["name"], sorted(workers)))
     return result
 
 
-def make_site_triplets(sites):
-    """Return site1, site2, worker1, worker2, worker3 tuples."""
-    triplets = []
+def make_site_pairs(sites):
+    """Pair sites with different workers."""
+    pairs = []
     for i in range(len(sites) - 1):
         site1, workers1 = sites[i]
         site2, workers2 = sites[i + 1]
-        if len(workers1) >= 2 and len(workers2) >= 1:
-            triplets.append((site1, site2, workers1[0], workers1[1], workers2[0]))
-    return triplets
+        if workers1 and workers2:
+            pairs.append((site1, site2, workers1[0], workers2[0]))
+    return pairs
 
 
-def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
+def create_fabnetv6_sharednic_slice(site1, site2, w1, w2):
     with fim_lock:
-
         fablib = FablibManager(fabric_rc=fabric_rc)
-
-        slice_name = f"test-323-l2sts-{site1.lower()}-{site2.lower()}-{int(time.time())}"
-        print(f"[{site1}/{site2}] Creating L2STS slice: {slice_name}")
+        slice_name = f"test-325-fabnetv6-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        print(f"[{site1}/{site2}] Creating FABNetv6 slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
 
-        # Node1 on site1 worker1
         node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
 
-        # Node2 on site1 worker2
-        node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
+        node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
 
-        # Node3 on site2 worker3
-        node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
-        iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+        net1 = slice_obj.add_l3network(name="fabnetv6-net1", interfaces=[iface1], type=NETWORK_TYPE)
+        net2 = slice_obj.add_l3network(name="fabnetv6-net2", interfaces=[iface2], type=NETWORK_TYPE)
 
-        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -105,22 +99,21 @@ def delete_slice(slice_obj):
         print(f"Deletion error: {e}")
 
 
-def test_l2sts_sharednic_ping(fablib):
+def test_fabnetv6_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
     available_ips = list(SUBNET)[1:]
 
-    sites_with_workers = get_sites_with_workers(fablib)
-    triplets = make_site_triplets(sites_with_workers)
+    site_pairs = make_site_pairs(get_sites_with_workers(fablib))
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
-        future_to_triplet = {
-            executor.submit(create_l2sts_sharednic_slice, site1, site2, w1, w2, w3): (site1, site2)
-            for site1, site2, w1, w2, w3 in triplets
+        future_to_pair = {
+            executor.submit(create_fabnetv6_sharednic_slice, site1, site2, w1, w2): (site1, site2)
+            for site1, site2, w1, w2 in site_pairs
         }
 
-        for future in as_completed(future_to_triplet):
-            site1, site2 = future_to_triplet[future]
+        for future in as_completed(future_to_pair):
+            site1, site2 = future_to_pair[future]
             key = f"{site1}-{site2}"
             try:
                 slice_obj = future.result()
@@ -138,31 +131,28 @@ def test_l2sts_sharednic_ping(fablib):
 
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
-            node3 = slice_obj.get_node("node3")
 
-            iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            iface3 = node3.get_interface(network_name=NETWORK_NAME)
+            iface1 = node1.get_interface(network_name="fabnetv6-net1")
+            iface2 = node2.get_interface(network_name="fabnetv6-net2")
 
             ip1 = str(available_ips.pop(0))
             ip2 = str(available_ips.pop(0))
-            ip3 = str(available_ips.pop(0))
 
             iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
             iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-            iface3.ip_addr_add(addr=ip3, subnet=SUBNET)
 
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
-            node3.execute(f"ip addr show {iface3.get_os_interface()}")
+            node1.ip_route_add(subnet=SUBNET, gateway=None)
+            node2.ip_route_add(subnet=SUBNET, gateway=None)
 
-            node1.execute(f"ping -c 5 {ip2}")
-            node1.execute(f"ping -c 5 {ip3}")
-            node2.execute(f"ping -c 5 {ip3}")
+            node1.execute(f"ip -6 addr show {iface1.get_os_interface()}")
+            node2.execute(f"ip -6 addr show {iface2.get_os_interface()}")
+
+            node1.execute(f"ping6 -c 5 {ip2}")
+            node2.execute(f"ping6 -c 5 {ip1}")
 
             results[key] = True
         except Exception as e:
-            print(f"[{key}] Ping test failed: {e}")
+            print(f"[{key}] FABNetv6 ping test failed: {e}")
             traceback.print_exc()
             results[key] = False
 
@@ -170,4 +160,4 @@ def test_l2sts_sharednic_ping(fablib):
         delete_slice(slice_obj)
 
     failed = [k for k, passed in results.items() if not passed]
-    assert not failed, f"L2STS Shared NIC test failed on: {', '.join(failed)}"
+    assert not failed, f"FABNetv6 Shared NIC test failed on: {', '.join(failed)}"

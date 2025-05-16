@@ -1,13 +1,35 @@
+#!/usr/bin/env python3
+#
+# MIT License
+#
+# Copyright (c) 2023 FABRIC Testbed
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# Author: Komal Thareja (kthare10@renci.org)
 import pytest
 import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+from tests.base_test import fabric_rc, fim_lock
 
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
 
 SMART_NIC_MODELS = ['NIC_ConnectX_5', 'NIC_ConnectX_6']
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
@@ -28,25 +50,27 @@ def get_active_sites(fablib):
 
 
 def create_smartnic_bridge_slice(site, nic_type1, nic_type2):
-    fablib = FablibManager(fabric_rc=fabric_rc)
+    with fim_lock:
 
-    site_name = site["name"]
-    slice_name = f"test-321-smartnic-{nic_type1.lower()}-{nic_type2.lower()}-{site_name.lower()}-{int(time.time())}"
-    print(f"[{site_name}] Creating slice: {slice_name}")
+        fablib = FablibManager(fabric_rc=fabric_rc)
 
-    slice_obj = fablib.new_slice(name=slice_name)
+        site_name = site["name"]
+        slice_name = f"test-321-smartnic-{nic_type1.lower()}-{nic_type2.lower()}-{site_name.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating slice: {slice_name}")
 
-    node1 = slice_obj.add_node(name="node1", site=site_name,
-                               cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    iface1 = node1.add_component(model=nic_type1, name="smartnic1").get_interfaces()[0]
+        slice_obj = fablib.new_slice(name=slice_name)
 
-    node2 = slice_obj.add_node(name="node2", site=site_name,
-                               cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    iface2 = node2.add_component(model=nic_type2, name="smartnic2").get_interfaces()[0]
+        node1 = slice_obj.add_node(name="node1", site=site_name,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface1 = node1.add_component(model=nic_type1, name="smartnic1").get_interfaces()[0]
 
-    slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
-    slice_obj.submit(wait=False)
-    return slice_obj
+        node2 = slice_obj.add_node(name="node2", site=site_name,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface2 = node2.add_component(model=nic_type2, name="smartnic2").get_interfaces()[0]
+
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):

@@ -1,13 +1,33 @@
+#!/usr/bin/env python3
+#
+# MIT License
+#
+# Copyright (c) 2023 FABRIC Testbed
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# Author: Komal Thareja (kthare10@renci.org)
 import pytest
 import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
-
-fabric_rc = None
-#os.environ['FABRIC_AVOID'] = 'UKY'
-#fabric_rc = '/Users/kthare10/work/fabric_config_dev/fabric_rc'
+from tests.base_test import fabric_rc, fim_lock
 
 
 SMART_NIC_MODELS = {
@@ -30,18 +50,19 @@ def get_active_sites(fablib):
 
 
 def create_smartnic_slice(site, nic_model):
-    fablib = FablibManager(fabric_rc=fabric_rc)
+    with fim_lock:
+        fablib = FablibManager(fabric_rc=fabric_rc)
 
-    site_name = site["name"]
-    slice_name = f"test-312-smartnic-{site_name.lower()}-{nic_model.lower()}-{int(time.time())}"
-    print(f"[{site_name}] Creating Smart NIC slice: {slice_name}")
+        site_name = site["name"]
+        slice_name = f"test-312-smartnic-{site_name.lower()}-{nic_model.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating Smart NIC slice: {slice_name}")
 
-    slice_obj = fablib.new_slice(name=slice_name)
-    node = slice_obj.add_node(name="smartnic-node", site=site_name,
-                              cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-    node.add_component(model=nic_model, name="smartnic1")
-    slice_obj.submit(wait=False)
-    return slice_obj
+        slice_obj = fablib.new_slice(name=slice_name)
+        node = slice_obj.add_node(name="smartnic-node", site=site_name,
+                                  cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        node.add_component(model=nic_model, name="smartnic1")
+        slice_obj.submit(wait=False)
+        return slice_obj
 
 
 def delete_slice(slice_obj):
