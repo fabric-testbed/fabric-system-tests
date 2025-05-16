@@ -27,7 +27,7 @@ import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tests.base_test import fabric_rc
+from tests.base_test import fabric_rc, fim_lock
 
 
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
