@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+from itertools import combinations
+
 import pytest
 import traceback
 import time
@@ -60,11 +62,12 @@ def get_sites_with_workers(fablib):
 
 
 def make_site_pairs(sites):
-    """Pair sites with different workers."""
+    """
+    Return unique (site1, site2, worker1, worker2) pairs where each site has at least one worker.
+    Avoids (a, a) and symmetric duplicates (a, b) / (b, a).
+    """
     pairs = []
-    for i in range(len(sites) - 1):
-        site1, workers1 = sites[i]
-        site2, workers2 = sites[i + 1]
+    for (site1, workers1), (site2, workers2) in combinations(sites, 2):
         if workers1 and workers2:
             pairs.append((site1, site2, workers1[0], workers2[0]))
     return pairs

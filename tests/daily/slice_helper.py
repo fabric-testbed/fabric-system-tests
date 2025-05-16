@@ -25,7 +25,7 @@
 import json
 import time
 import traceback
-from itertools import product
+from itertools import product, combinations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from tests.base_test import fabric_rc, fim_lock
@@ -110,7 +110,7 @@ def wait_and_configure_slices(slices):
 
 
 def get_site_pairs(slices):
-    return list(product(slices.keys(), slices.keys()))
+    return list(combinations(slices.keys(), 2))
 
 
 def collect_node_ips(slices):

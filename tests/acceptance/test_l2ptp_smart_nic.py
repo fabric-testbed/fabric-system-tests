@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+from itertools import combinations
+
 import pytest
 import traceback
 import time
@@ -56,10 +58,12 @@ def get_smartnic_sites(fablib, nic_capacity_field):
 
 
 def make_site_pairs(site_list):
-    pairs = []
-    for i in range(0, len(site_list) - 1, 2):
-        pairs.append((site_list[i]["name"], site_list[i+1]["name"]))
-    return pairs
+    """
+    Return unique (site1_name, site2_name) pairs from site_list.
+    Avoids (a, a) and (a, b) vs (b, a) duplication.
+    """
+    return [(s1["name"], s2["name"]) for s1, s2 in combinations(site_list, 2)]
+
 
 
 def create_l2ptp_slice(site1, site2, nic_model):
