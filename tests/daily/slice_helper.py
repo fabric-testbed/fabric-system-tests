@@ -51,7 +51,7 @@ def delete_existing_slices(fablib):
 
 
 def get_sites_with_workers(fablib):
-    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
+    return [site for site in fablib.list_sites(output="list", avoid=["EDUKY"]) if site.get("state") == "Active"]
 
 
 def create_slice(site, worker):
