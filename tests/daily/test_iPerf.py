@@ -37,7 +37,7 @@ from tests.daily.slice_helper import (
 )
 
 DOCKER_IMAGE = 'pruth/fabric-multitool-rockylinux9:latest'
-RUN_TIME = 30
+RUN_TIME = 10
 
 @pytest.fixture(scope="module")
 def fablib():
@@ -54,7 +54,7 @@ def test_site_worker_pair_ping_iperf(fablib):
     sites = get_sites_with_workers(fablib)
 
     # Step 3: Create slices for each (site, worker) pair
-    slices = create_site_worker_slices(fablib, sites)
+    slices, failed_slices = create_site_worker_slices(fablib, sites)
 
     # Step 4: Wait for all slices and configure them
     wait_and_configure_slices(slices)
@@ -106,6 +106,13 @@ def test_site_worker_pair_ping_iperf(fablib):
     save_results_json(results)
 
     # Step 7: Summary and cleanup
+    if failed_slices:
+        print("\nThe following slices failed to create:")
+        for s in failed_slices:
+            print(f" - {s}")
+    else:
+        print("\nAll slices created successfully.")
+
     failed = {pair: r for pair, r in results.items() if "FAIL" in r["ping"] or "FAIL" in r["iperf3"]}
     if failed:
         print("\nFailures:")
@@ -115,4 +122,10 @@ def test_site_worker_pair_ping_iperf(fablib):
         print("\nAll site-worker pairs passed.")
         cleanup_slices(slices)
 
-    assert not failed, f"Some slice pairs failed: {', '.join(failed.keys())}"
+    #assert not failed, f"Some slice pairs failed: {', '.join(failed.keys())}"
+    assert not failed and not failed_slices, (
+        f"Some tests failed.\n"
+        f"Failed slice pairs: {', '.join(failed.keys()) if failed else 'None'}\n"
+        f"Failed to create slices: {', '.join(failed_slices) if failed_slices else 'None'}"
+    )
+
