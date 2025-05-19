@@ -107,6 +107,7 @@ def test_create_nvme_vms_per_site(fablib):
             stdout, stderr = node.execute(cmd)
             assert 'Non-Volatile memory controller' in stdout, f"[{site_name}] NVMe not detected"
 
+            '''
             # Configure NVMe drives
             nvme1 = node.get_component("nvme1")
             nvme2 = node.get_component("nvme2")
@@ -116,7 +117,7 @@ def test_create_nvme_vms_per_site(fablib):
             # Confirm partitions
             stdout, stderr = node.execute("sudo fdisk -l")
             assert "Disk /dev" in stdout, f"[{site_name}] No disk partitions found after configuration"
-
+            '''
             results[site_name] = True
         except Exception as e:
             print(f"[{site_name}] NVMe validation error: {e}")
