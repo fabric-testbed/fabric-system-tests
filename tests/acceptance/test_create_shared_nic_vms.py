@@ -104,7 +104,7 @@ def test_create_shared_nic_vms_per_site(fablib):
             node = slice_obj.get_node("sharednic-node")
 
             print(f"[{site_name}] Checking Shared NIC device via lspci...")
-            cmd = "sudo dnf install -y -q pciutils && lspci"
+            cmd = "sudo dnf install -y -q pciutils && lspci | grep -i Virtual"
             stdout, stderr = node.execute(cmd)
             assert "Mellanox Technologies" in stdout and "Virtual Function" in stdout, \
                 f"[{site_name}] Shared NIC not detected"
