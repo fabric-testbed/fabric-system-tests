@@ -112,7 +112,7 @@ def create_site_worker_slices(fablib, sites):
                     failed_slices[slice_name] = slice_obj_or_error
             except Exception as e:
                 print(f"Exception for {site_worker}: {e}")
-    return slices
+    return slices, failed_slices
 
 
 def wait_and_configure_slices(slices):

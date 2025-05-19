@@ -108,8 +108,8 @@ def test_site_worker_pair_ping_iperf(fablib):
     # Step 7: Summary and cleanup
     if failed_slices:
         print("\nThe following slices failed to create:")
-        for s in failed_slices:
-            print(f" - {s}")
+        for s_name, error in failed_slices.items():
+            print(f" - {s_name}: {error}")
     else:
         print("\nAll slices created successfully.")
 
