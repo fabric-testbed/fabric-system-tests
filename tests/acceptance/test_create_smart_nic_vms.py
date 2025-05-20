@@ -107,7 +107,7 @@ def test_create_smartnic_vms_per_site(fablib):
             node = slice_obj.get_node("smartnic-node")
 
             print(f"[{key}] Checking Smart NIC devices via lspci...")
-            cmd = "sudo dnf install -y -q pciutils && lspci"
+            cmd = "sudo dnf install -y -q pciutils && lspci | grep -i ConnectX"
             stdout, stderr = node.execute(cmd)
 
             assert ("ConnectX-6" in stdout or "ConnectX-5" in stdout), \
