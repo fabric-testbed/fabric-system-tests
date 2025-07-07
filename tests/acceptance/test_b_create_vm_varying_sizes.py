@@ -110,25 +110,37 @@ def test_non_blocking_vm_creation(fablib):
 
     # Wait for all slices to complete provisioning
     for site_name, slice_obj in slice_objects.items():
-        slice_obj.wait(progress=False)
-        slice_obj.wait_ssh(progress=False)
-        slice_obj.post_boot_config()
-        success = slice_obj.get_state() in ["StableOK", "StableError"]
-        results[site_name] = success
+        try:
+            print(f"[{site_name}] Waiting for slice provisioning...")
+            slice_obj.wait(progress=False)
+            slice_obj.wait_ssh(progress=False)
+            slice_obj.post_boot_config()
+            state = slice_obj.get_state()
+            success = state in ["StableOK", "StableError"]
+            results[site_name] = success
 
-        if success:
-            try:
-                for node in slice_obj.get_nodes():
-                    assert node.get_cores() >= VM_CONFIG["cores"]
-                    assert node.get_ram() >= VM_CONFIG["ram"]
-                    assert node.get_disk() >= VM_CONFIG["disk"]
-            except Exception as e:
-                print(f"[{site_name}] Validation error: {e}")
-                results[site_name] = False
+            if not success:
+                print(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
+                continue  # Skip further checks and do not delete this slice
 
-    # Cleanup
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+            # Validation checks
+            for node in slice_obj.get_nodes():
+                assert node.get_cores() >= VM_CONFIG["cores"], node.get_error_message()
+                assert node.get_ram() >= VM_CONFIG["ram"], node.get_error_message()
+                assert node.get_disk() >= VM_CONFIG["disk"], node.get_error_message()
+            print(f"[{site_name}] Validation successful.")
+
+        except Exception as e:
+            print(f"[{site_name}] Error during provisioning or validation: {e}")
+            traceback.print_exc()
+            results[site_name] = False
+
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
     failed = [site for site, passed in results.items() if not passed]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
