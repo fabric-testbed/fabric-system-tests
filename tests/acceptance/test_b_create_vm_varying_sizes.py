@@ -144,5 +144,5 @@ def test_non_blocking_vm_creation(fablib):
         else:
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site - info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
