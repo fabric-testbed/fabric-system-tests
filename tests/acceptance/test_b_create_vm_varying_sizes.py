@@ -62,7 +62,7 @@ def create_and_submit_slice(site):
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
         worker_count = site["hosts"]
-        slice_name = f"test311-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test311-varying-size-{site_name.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
@@ -117,7 +117,8 @@ def test_non_blocking_vm_creation(fablib):
             slice_obj.post_boot_config()
             state = slice_obj.get_state()
             success = state in ["StableOK", "StableError"]
-            results[site_name] = success
+            results[site_name] = {"state": success,
+                                  "error": ""}
 
             if not success:
                 print(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
@@ -133,7 +134,8 @@ def test_non_blocking_vm_creation(fablib):
         except Exception as e:
             print(f"[{site_name}] Error during provisioning or validation: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {"state": False,
+                                  "error": f"{e}"}
 
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
@@ -142,5 +144,5 @@ def test_non_blocking_vm_creation(fablib):
         else:
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [site for site, passed in results.items() if not passed]
+    failed = [f"{site - info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
