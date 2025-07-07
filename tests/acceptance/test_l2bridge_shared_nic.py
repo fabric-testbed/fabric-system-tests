@@ -105,7 +105,10 @@ def test_sharednic_local_bridge_reachability(fablib):
             except Exception as e:
                 print(f"[{site_name}] Slice submission failed: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     available_ips = list(SUBNET)[1:]
     for site_name, slice_obj in slice_objects.items():
@@ -132,15 +135,21 @@ def test_sharednic_local_bridge_reachability(fablib):
             # Test ping
             stdout, stderr = node1.execute(f"ping -c 5 {ip2}")
             assert "0% packet loss" in stdout, f"[{site_name}] Ping failed between nodes"
-            results[site_name] = True
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
 
         except Exception as e:
             print(f"[{site_name}] Local bridge test failed: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [site for site, ok in results.items() if not ok]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Local bridge test failed on: {', '.join(failed)}"

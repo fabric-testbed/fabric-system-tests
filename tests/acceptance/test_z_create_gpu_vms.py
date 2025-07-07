@@ -115,7 +115,10 @@ def test_create_gpu_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{site_name}] Error submitting slice: {e}")
                 traceback.print_exc()
-                results[site_name_gpu_model] = False
+                results[site_name_gpu_model] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     # Wait for all slices to complete provisioning
     for site_name_gpu_model, slice_obj in slice_objects.items():
@@ -123,7 +126,10 @@ def test_create_gpu_vms_per_site(fablib):
         slice_obj.wait_ssh(progress=False)
         slice_obj.post_boot_config()
         success = slice_obj.get_state() in ["StableOK", "StableError"]
-        results[site_name_gpu_model] = success
+        results[site_name] = {
+            "state": success,
+            "error": ""
+        }
 
         if success:
             try:
@@ -158,11 +164,14 @@ def test_create_gpu_vms_per_site(fablib):
                 assert "NVIDIA" in stdout, f"{slice_name} - GPU not detected by nvidia-smi"
             except Exception as e:
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
-                results[site_name_gpu_model] = False
+                results[site_name_gpu_model] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     # Cleanup
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [site for site, passed in results.items() if not passed]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice with GPUs failed on: {', '.join(failed)}"

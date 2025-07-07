@@ -93,7 +93,10 @@ def test_create_shared_nic_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{site_name}] Slice submission error: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     for site_name, slice_obj in slice_objects.items():
         try:
@@ -109,14 +112,20 @@ def test_create_shared_nic_vms_per_site(fablib):
             assert "Mellanox Technologies" in stdout and "Virtual Function" in stdout, \
                 f"[{site_name}] Shared NIC not detected"
 
-            results[site_name] = True
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
         except Exception as e:
             print(f"[{site_name}] Shared NIC validation error: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [site for site, success in results.items() if not success]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Shared NIC attachment failed on: {', '.join(failed)}"

@@ -128,7 +128,10 @@ def test_smartnic_l2ptp_across_sites(fablib):
             except Exception as e:
                 print(f"[{key}] Slice submission failed: {e}")
                 traceback.print_exc()
-                results[key] = False
+                results[key] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     for key, slice_obj in slice_objects.items():
         try:
@@ -151,15 +154,21 @@ def test_smartnic_l2ptp_across_sites(fablib):
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
             assert "0% packet loss" in stdout, f"[{key}] Ping failed"
-            results[key] = True
+            results[key] = {
+                "state": True,
+                "error": ""
+            }
 
         except Exception as e:
             print(f"[{key}] L2PTP reachability test failed: {e}")
             traceback.print_exc()
-            results[key] = False
+            results[key] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [k for k, passed in results.items() if not passed]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"L2PTP SmartNIC tests failed on: {', '.join(failed)}"

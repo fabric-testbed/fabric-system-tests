@@ -96,7 +96,10 @@ def test_create_smartnic_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{key}] Slice submission error: {e}")
                 traceback.print_exc()
-                results[key] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     for key, slice_obj in slice_objects.items():
         try:
@@ -117,14 +120,20 @@ def test_create_smartnic_vms_per_site(fablib):
             nic_count = stdout.count("Ethernet controller: Mellanox Technologies")
             assert nic_count >= 2, f"[{key}] Expected >=2 NIC entries, found {nic_count}"
 
-            results[key] = True
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
         except Exception as e:
             print(f"[{key}] Smart NIC validation error: {e}")
             traceback.print_exc()
-            results[key] = False
+            results[site_name] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [key for key, success in results.items() if not success]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Smart NIC attachment failed on: {', '.join(failed)}"

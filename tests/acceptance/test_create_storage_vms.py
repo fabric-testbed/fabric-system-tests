@@ -92,7 +92,10 @@ def test_attached_storage_parallel(fablib):
             except Exception as e:
                 print(f"[{site_name}] Slice submission failed: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     for site_name, slice_obj in slice_objects.items():
         try:
@@ -120,14 +123,20 @@ def test_attached_storage_parallel(fablib):
             stdout, _ = node.execute("ls -lh /mnt/fabric_storage")
             assert "zero-file" in stdout, f"[{site_name}] Write verification failed"
 
-            results[site_name] = True
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
         except Exception as e:
             print(f"[{site_name}] Storage test failed: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
     for slice_obj in slice_objects.values():
         delete_slice(slice_obj)
 
-    failed = [site for site, ok in results.items() if not ok]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Attached storage test failed on: {', '.join(failed)}"
