@@ -31,7 +31,6 @@ from ipaddress import IPv4Network
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fabrictestbed_extensions.fablib.slice import Slice
 
 from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
@@ -63,7 +62,7 @@ def get_sites_with_workers(fablib):
         if hosts >= 1:
             workers = []
             for i in range(1, hosts):
-                workers.append(f"{site['name']}-w{i}.fabric-testbed.net")
+                workers.append(f"{site['name'].lower()}-w{i}.fabric-testbed.net")
             result.append((site["name"], sorted(workers)))
     return result
 

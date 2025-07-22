@@ -61,7 +61,7 @@ def get_sites_with_workers(fablib):
         if hosts >= 2:
             workers = []
             for i in range(1, hosts):
-                workers.append(f"{site['name']}-w{i}.fabric-testbed.net")
+                workers.append(f"{site['name'].lower()}-w{i}.fabric-testbed.net")
             result.append((site["name"], sorted(workers)))
 
     return result
