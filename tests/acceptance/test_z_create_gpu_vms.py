@@ -28,6 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 GPU_MODELS = {
@@ -117,7 +118,7 @@ def test_create_gpu_vms_per_site(fablib):
                 traceback.print_exc()
                 results[site_name_gpu_model] = {
                     "state": False,
-                    "error": f"{e}"
+                    "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
     # Wait for all slices to complete provisioning
@@ -166,7 +167,7 @@ def test_create_gpu_vms_per_site(fablib):
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
                 results[site_name_gpu_model] = {
                     "state": False,
-                    "error": f"{e}"
+                    "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
     # Cleanup

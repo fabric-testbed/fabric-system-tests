@@ -27,6 +27,8 @@ import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -93,7 +95,7 @@ def test_create_nvme_vms_per_site(fablib):
                 print(f"[{site_name}] Slice submission error: {e}")
                 traceback.print_exc()
                 results[site_name] = {"state": False,
-                                      "error": f"{e}"}
+                                      "error": error_message(slice_obj=slice_obj, exception=e)}
 
     for site_name, slice_obj in slice_objects.items():
         try:
@@ -114,7 +116,7 @@ def test_create_nvme_vms_per_site(fablib):
             print(f"[{site_name}] NVMe validation error: {e}")
             traceback.print_exc()
             results[site_name] = {"state": False,
-                                  "error": f"{e}"}
+                                  "error": error_message(slice_obj=slice_obj, exception=e)}
 
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():

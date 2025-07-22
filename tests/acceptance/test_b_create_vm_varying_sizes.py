@@ -28,6 +28,8 @@ import pytest
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 VM_CONFIG = {
@@ -106,7 +108,8 @@ def test_non_blocking_vm_creation(fablib):
             except Exception as e:
                 print(f"[{site_name}] Error submitting slice: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {"state": False,
+                                      "error": error_message(slice_obj=slice_obj, exception=e)}
 
     # Wait for all slices to complete provisioning
     for site_name, slice_obj in slice_objects.items():
@@ -135,7 +138,7 @@ def test_non_blocking_vm_creation(fablib):
             print(f"[{site_name}] Error during provisioning or validation: {e}")
             traceback.print_exc()
             results[site_name] = {"state": False,
-                                  "error": f"{e}"}
+                                  "error": error_message(slice_obj=slice_obj, exception=e)}
 
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
@@ -146,3 +149,4 @@ def test_non_blocking_vm_creation(fablib):
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
+

@@ -30,6 +30,8 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -141,7 +143,7 @@ def test_l2sts_sharednic_ping(fablib):
                 traceback.print_exc()
                 results[site_name] = {
                     "state": False,
-                    "error": f"{e}"
+                    "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
     for key, slice_obj in slice_objects.items():
@@ -183,7 +185,7 @@ def test_l2sts_sharednic_ping(fablib):
             traceback.print_exc()
             results[key] = {
                 "state": False,
-                "error": f"{e}"
+                "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
     # Cleanup only successful slices

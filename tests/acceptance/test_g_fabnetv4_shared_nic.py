@@ -33,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fabrictestbed_extensions.fablib.slice import Slice
 
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -183,19 +184,3 @@ def test_fabnetv4_sharednic_ping(fablib):
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"FABNetv4 Shared NIC test failed on: {', '.join(failed)}"
-
-
-def error_message(slice_obj: Slice, exception: Exception):
-    cascade_notice_string1 = "Closing reservation due to failure in slice"
-    cascade_notice_string2 = "is in a terminal state"
-
-    try:
-        ret_val = f"{slice_obj.get_name()}/{slice_obj.get_slice_id()} in {slice_obj.get_state()}"
-        for sliver in slice_obj.get_slivers():
-            if cascade_notice_string1 in sliver.notice or cascade_notice_string2 in sliver.notice:
-                continue
-            ret_val += f" {sliver.sliver_id} - {sliver.notice}"
-
-        return ret_val
-    except Exception:
-        return str(exception)
