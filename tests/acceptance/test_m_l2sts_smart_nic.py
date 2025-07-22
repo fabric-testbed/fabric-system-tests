@@ -180,8 +180,12 @@ def test_l2sts_smartnic_ping(fablib):
                 "error": f"{e}"
             }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"L2STS SmartNIC test failed on: {', '.join(failed)}"

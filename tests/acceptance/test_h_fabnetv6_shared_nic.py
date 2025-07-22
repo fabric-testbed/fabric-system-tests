@@ -27,7 +27,7 @@ from itertools import combinations
 import pytest
 import traceback
 import time
-from ipaddress import IPv4Network
+from ipaddress import IPv6Network
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tests.base_test import fabric_rc, fim_lock
@@ -35,9 +35,9 @@ from tests.base_test import fabric_rc, fim_lock
 
 NIC_MODEL = 'NIC_Basic'
 NIC_CAPACITY_FIELD = 'nic_basic_capacity'
-NETWORK_TYPE = 'IPv4'
-MAX_PARALLEL = 2  # FABNetv4 provisioning can be slow
-SUBNET = IPv4Network("192.168.100.0/24")
+NETWORK_TYPE = 'IPv6'
+MAX_PARALLEL = 2  # Limit concurrency
+SUBNET = IPv6Network("2001:db8:abcd:0012::/64")
 
 
 @pytest.fixture(scope="module")
@@ -73,11 +73,11 @@ def make_site_pairs(sites):
     return pairs
 
 
-def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
+def create_fabnetv6_sharednic_slice(site1, site2, w1, w2):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
-        slice_name = f"test-324-fabnetv4-{site1.lower()}-{site2.lower()}-{int(time.time())}"
-        print(f"[{site1}/{site2}] Creating FABNetv4 slice: {slice_name}")
+        slice_name = f"test-325-fabnetv6-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        print(f"[{site1}/{site2}] Creating FABNetv6 slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
 
@@ -87,8 +87,8 @@ def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
         node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
 
-        net1 = slice_obj.add_l3network(name="fabnetv4-net1", interfaces=[iface1], type=NETWORK_TYPE)
-        net2 = slice_obj.add_l3network(name="fabnetv4-net2", interfaces=[iface2], type=NETWORK_TYPE)
+        net1 = slice_obj.add_l3network(name="fabnetv6-net1", interfaces=[iface1], type=NETWORK_TYPE)
+        net2 = slice_obj.add_l3network(name="fabnetv6-net2", interfaces=[iface2], type=NETWORK_TYPE)
 
         slice_obj.submit(wait=False)
         return slice_obj
@@ -102,7 +102,7 @@ def delete_slice(slice_obj):
         print(f"Deletion error: {e}")
 
 
-def test_fabnetv4_sharednic_ping(fablib):
+def test_fabnetv6_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
     available_ips = list(SUBNET)[1:]
@@ -111,7 +111,7 @@ def test_fabnetv4_sharednic_ping(fablib):
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_pair = {
-            executor.submit(create_fabnetv4_sharednic_slice, site1, site2, w1, w2): (site1, site2)
+            executor.submit(create_fabnetv6_sharednic_slice, site1, site2, w1, w2): (site1, site2)
             for site1, site2, w1, w2 in site_pairs
         }
 
@@ -138,8 +138,8 @@ def test_fabnetv4_sharednic_ping(fablib):
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
 
-            iface1 = node1.get_interface(network_name="fabnetv4-net1")
-            iface2 = node2.get_interface(network_name="fabnetv4-net2")
+            iface1 = node1.get_interface(network_name="fabnetv6-net1")
+            iface2 = node2.get_interface(network_name="fabnetv6-net2")
 
             ip1 = str(available_ips.pop(0))
             ip2 = str(available_ips.pop(0))
@@ -150,26 +150,30 @@ def test_fabnetv4_sharednic_ping(fablib):
             node1.ip_route_add(subnet=SUBNET, gateway=None)
             node2.ip_route_add(subnet=SUBNET, gateway=None)
 
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
+            node1.execute(f"ip -6 addr show {iface1.get_os_interface()}")
+            node2.execute(f"ip -6 addr show {iface2.get_os_interface()}")
 
-            node1.execute(f"ping -c 5 {ip2}")
-            node2.execute(f"ping -c 5 {ip1}")
+            node1.execute(f"ping6 -c 5 {ip2}")
+            node2.execute(f"ping6 -c 5 {ip1}")
 
             results[key] = {
                 "state": True,
                 "error": ""
             }
         except Exception as e:
-            print(f"[{key}] FABNetv4 ping test failed: {e}")
+            print(f"[{key}] FABNetv6 ping test failed: {e}")
             traceback.print_exc()
             results[key] = {
                 "state": False,
                 "error": f"{e}"
             }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
-    assert not failed, f"FABNetv4 Shared NIC test failed on: {', '.join(failed)}"
+    assert not failed, f"FABNetv6 Shared NIC test failed on: {', '.join(failed)}"

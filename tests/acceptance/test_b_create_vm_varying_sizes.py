@@ -139,7 +139,7 @@ def test_non_blocking_vm_creation(fablib):
 
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name):
+        if results.get(site_name, {}).get("state", False):
             delete_slice(slice_obj)
         else:
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")

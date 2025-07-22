@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tests.base_test import fabric_rc, fim_lock
 
 
-NVME_MODEL = 'NVME_P4510'
+NIC_MODEL = 'NIC_Basic'
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
 MAX_PARALLEL_SITES = 5
 
@@ -46,18 +46,19 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_nvme_slice(site):
+def create_shared_nic_slice(site):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        slice_name = f"test-312-nvme-{site_name.lower()}-{int(time.time())}"
-        print(f"[{site_name}] Creating NVMe slice: {slice_name}")
+        slice_name = f"test-312-sharednic-{site_name.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating Shared NIC slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
-        node = slice_obj.add_node(name="nvme-node", site=site_name,
+        node = slice_obj.add_node(name="sharednic-node", site=site_name,
                                   cores=VM_CONFIG["cores"],
                                   ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-        node.add_component(model=NVME_MODEL, name="nvme1")
+        # Attach a shared NIC
+        node.add_component(model=NIC_MODEL, name="sharednic1")
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -70,17 +71,17 @@ def delete_slice(slice_obj):
         print(f"[{slice_obj.get_name()}] Slice deletion error: {e}")
 
 
-def test_create_nvme_vms_per_site(fablib):
+def test_create_shared_nic_vms_per_site(fablib):
     sites = get_active_sites(fablib)
     results = {}
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
         future_to_site = {}
         for site in sites:
-            # Check NVME_P4510 availability before submitting
-            if site.get('nvme_capacity', 0) < 2:
+            # Check if shared NICs are available (assume capacity key is known)
+            if site.get("nic_basic_capacity", 0) == 0:
                 continue
-            future = executor.submit(create_nvme_slice, site)
+            future = executor.submit(create_shared_nic_slice, site)
             future_to_site[future] = site["name"]
 
         slice_objects = {}
@@ -92,40 +93,43 @@ def test_create_nvme_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{site_name}] Slice submission error: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": f"{e}"
+                }
 
     for site_name, slice_obj in slice_objects.items():
         try:
             slice_obj.wait(progress=False)
             slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
-            node = slice_obj.get_node("nvme-node")
 
-            # Confirm NVMe devices are visible
-            print(f"[{site_name}] Checking NVMe devices via lspci...")
-            cmd = "sudo dnf install -y -q pciutils && lspci | grep -i nvme"
+            node = slice_obj.get_node("sharednic-node")
+
+            print(f"[{site_name}] Checking Shared NIC device via lspci...")
+            cmd = "sudo dnf install -y -q pciutils && lspci | grep -i Virtual"
             stdout, stderr = node.execute(cmd)
-            assert 'Non-Volatile memory controller' in stdout, f"[{site_name}] NVMe not detected"
+            assert "Mellanox Technologies" in stdout and "Virtual Function" in stdout, \
+                f"[{site_name}] Shared NIC not detected"
 
-            '''
-            # Configure NVMe drives
-            nvme1 = node.get_component("nvme1")
-            nvme2 = node.get_component("nvme2")
-            nvme1.configure_nvme()
-            nvme2.configure_nvme()
-
-            # Confirm partitions
-            stdout, stderr = node.execute("sudo fdisk -l")
-            assert "Disk /dev" in stdout, f"[{site_name}] No disk partitions found after configuration"
-            '''
-            results[site_name] = True
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
         except Exception as e:
-            print(f"[{site_name}] NVMe validation error: {e}")
+            print(f"[{site_name}] Shared NIC validation error: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": f"{e}"
+            }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [site for site, success in results.items() if not success]
-    assert not failed, f"NVMe attachment failed on: {', '.join(failed)}"
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    assert not failed, f"Shared NIC attachment failed on: {', '.join(failed)}"

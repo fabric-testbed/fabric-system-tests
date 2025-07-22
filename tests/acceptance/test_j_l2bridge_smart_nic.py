@@ -27,13 +27,15 @@ import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ipaddress import IPv4Network
 from tests.base_test import fabric_rc, fim_lock
 
 
+SMART_NIC_MODELS = ['NIC_ConnectX_5', 'NIC_ConnectX_6']
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
-STORAGE_NAME = "acceptance-testing"
-WORKER_SUFFIX = "w1.fabric-testbed.net"
 MAX_PARALLEL_SITES = 5
+NETWORK_NAME = "l2-bridge"
+SUBNET = IPv4Network("192.168.1.0/24")
 
 
 @pytest.fixture(scope="module")
@@ -47,20 +49,26 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_storage_slice(site):
+def create_smartnic_bridge_slice(site, nic_type1, nic_type2):
     with fim_lock:
 
         fablib = FablibManager(fabric_rc=fabric_rc)
+
         site_name = site["name"]
-        worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
-        slice_name = f"test-313-storage-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-321-smartnic-{nic_type1.lower()}-{nic_type2.lower()}-{site_name.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
-        node = slice_obj.add_node(name="storage-node", site=site_name,
-                                  host=worker, cores=VM_CONFIG["cores"],
-                                  ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-        node.add_storage(name=STORAGE_NAME)
+
+        node1 = slice_obj.add_node(name="node1", site=site_name,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface1 = node1.add_component(model=nic_type1, name="smartnic1").get_interfaces()[0]
+
+        node2 = slice_obj.add_node(name="node2", site=site_name,
+                                   cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
+        iface2 = node2.add_component(model=nic_type2, name="smartnic2").get_interfaces()[0]
+
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -73,16 +81,20 @@ def delete_slice(slice_obj):
         print(f"[{slice_obj.get_name()}] Slice deletion error: {e}")
 
 
-def test_attached_storage_parallel(fablib):
+def test_smartnic_local_bridge_reachability(fablib):
     sites = get_active_sites(fablib)
     results = {}
     slice_objects = {}
+    available_ips = list(SUBNET)[1:]
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
-        future_to_site = {
-            executor.submit(create_storage_slice, site): site["name"]
-            for site in sites
-        }
+        future_to_site = {}
+        for site in sites:
+            connectx5 = site.get("nic_connectx_5_capacity", 0)
+            connectx6 = site.get("nic_connectx_6_capacity", 0)
+            if connectx5 >= 1 and connectx6 >= 1:
+                future = executor.submit(create_smartnic_bridge_slice, site, "NIC_ConnectX_5", "NIC_ConnectX_6")
+                future_to_site[future] = site["name"]
 
         for future in as_completed(future_to_site):
             site_name = future_to_site[future]
@@ -103,40 +115,42 @@ def test_attached_storage_parallel(fablib):
             slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
 
-            node = slice_obj.get_node("storage-node")
-            storage = node.get_storage(STORAGE_NAME)
-            device = storage.get_device_name()
-            print(f"[{site_name}] Storage device: {device}")
+            node1 = slice_obj.get_node("node1")
+            node2 = slice_obj.get_node("node2")
 
-            # Format volume
-            node.execute(f"sudo mkfs.ext4 {device}")
+            # Assign IPs
+            iface1 = node1.get_interface(network_name=NETWORK_NAME)
+            ip1 = str(available_ips.pop(0))
+            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
+            node1.execute(f"ip addr show {iface1.get_os_interface()}")
 
-            # Mount volume
-            node.execute(
-                f"sudo mkdir -p /mnt/fabric_storage && "
-                f"sudo mount {device} /mnt/fabric_storage && "
-                f"df -h"
-            )
+            iface2 = node2.get_interface(network_name=NETWORK_NAME)
+            ip2 = str(available_ips.pop(0))
+            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
+            node2.execute(f"ip addr show {iface2.get_os_interface()}")
 
-            # Verify write
-            node.execute("sudo dd if=/dev/zero of=/mnt/fabric_storage/zero-file bs=1024 count=1024")
-            stdout, _ = node.execute("ls -lh /mnt/fabric_storage")
-            assert "zero-file" in stdout, f"[{site_name}] Write verification failed"
-
+            # Test reachability
+            stdout, stderr = node1.execute(f"ping -c 5 {ip2}")
+            assert "0% packet loss" in stdout, f"[{site_name}] Ping failed"
             results[site_name] = {
                 "state": True,
                 "error": ""
             }
+
         except Exception as e:
-            print(f"[{site_name}] Storage test failed: {e}")
+            print(f"[{site_name}] Smart NIC bridge test failed: {e}")
             traceback.print_exc()
             results[site_name] = {
                 "state": False,
                 "error": f"{e}"
             }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
-    assert not failed, f"Attached storage test failed on: {', '.join(failed)}"
+    assert not failed, f"Smart NIC bridge test failed on: {', '.join(failed)}"
