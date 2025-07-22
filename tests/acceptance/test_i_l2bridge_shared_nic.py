@@ -58,7 +58,7 @@ def create_local_bridge_sharednic_slice(site):
         fablib = FablibManager(fabric_rc=fabric_rc)
 
         site_name = site["name"]
-        slice_name = f"test-321-sharednic-bridge-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-i-321-sharednic-bridge-{site_name.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating slice: {slice_name}")
 
         worker1 = WORKER_TEMPLATE.format(site_name.lower(), 1)
@@ -69,12 +69,14 @@ def create_local_bridge_sharednic_slice(site):
         node1 = slice_obj.add_node(name="node1", site=site_name, host=worker1,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface1 = node1.add_component(model=NIC_MODEL, name="sharednic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
         node2 = slice_obj.add_node(name="node2", site=site_name, host=worker2,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface2 = node2.add_component(model=NIC_MODEL, name="sharednic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
-        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2], subnet=SUBNET)
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -112,7 +114,6 @@ def test_sharednic_local_bridge_reachability(fablib):
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
-    available_ips = list(SUBNET)[1:]
     for site_name, slice_obj in slice_objects.items():
         try:
             slice_obj.wait(progress=False)
@@ -124,15 +125,11 @@ def test_sharednic_local_bridge_reachability(fablib):
 
             # Configure Node1
             iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = str(available_ips.pop(0))
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
+            ip1 = iface1.get_ip_addr()
 
             # Configure Node2
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            ip2 = str(available_ips.pop(0))
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
+            ip2 = iface2.get_ip_addr()
 
             # Test ping
             stdout, stderr = node1.execute(f"ping -c 5 {ip2}")

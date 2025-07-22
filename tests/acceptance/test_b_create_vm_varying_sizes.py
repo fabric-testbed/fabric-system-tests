@@ -64,7 +64,7 @@ def create_and_submit_slice(site):
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
         worker_count = site["hosts"]
-        slice_name = f"test311-varying-size-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-b-311-varying-size-{site_name.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)

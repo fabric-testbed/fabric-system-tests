@@ -82,7 +82,7 @@ def make_site_pairs(sites):
 def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
-        slice_name = f"test-324-fabnetv4-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        slice_name = f"test-g-324-fabnetv4-{site1.lower()}-{site2.lower()}-{int(time.time())}"
         print(f"[{site1}/{site2}] Creating FABNetv4 slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
@@ -145,6 +145,17 @@ def test_fabnetv4_sharednic_ping(fablib):
 
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
+            net1 = slice_obj.get_network("fabnetv4-net1")
+            net2 = slice_obj.get_network("fabnetv4-net2")
+
+            node1.ip_route_add(
+                    subnet=fablib.FABNETV4_SUBNET,
+                    gateway=net1.get_gateway(),
+            )
+            node2.ip_route_add(
+                subnet=fablib.FABNETV4_SUBNET,
+                gateway=net2.get_gateway(),
+            )
 
             iface1 = node1.get_interface(network_name="fabnetv4-net1")
             iface2 = node2.get_interface(network_name="fabnetv4-net2")
@@ -155,8 +166,8 @@ def test_fabnetv4_sharednic_ping(fablib):
             node1.execute(f"ip addr show {iface1.get_os_interface()}")
             node2.execute(f"ip addr show {iface2.get_os_interface()}")
 
-            ping_out1 = node1.execute(f"ping -c 5 {ip2}")
-            ping_out2 = node2.execute(f"ping -c 5 {ip1}")
+            ping_out1, _ = node1.execute(f"ping -c 5 {ip2}")
+            ping_out2, _ = node2.execute(f"ping -c 5 {ip1}")
 
             if "0% packet loss" not in ping_out1 or "0% packet loss" not in ping_out2:
                 raise Exception("Failed to pass traffic!")

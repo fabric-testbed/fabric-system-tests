@@ -88,7 +88,7 @@ def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
 
         fablib = FablibManager(fabric_rc=fabric_rc)
 
-        slice_name = f"test-323-l2sts-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        slice_name = f"test-l-323-l2sts-{site1.lower()}-{site2.lower()}-{int(time.time())}"
         print(f"[{site1}/{site2}] Creating L2STS slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
@@ -96,16 +96,19 @@ def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
         # Node1 on site1 worker1
         node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
         # Node2 on site1 worker2
         node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
         # Node3 on site2 worker3
         node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
         iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+        iface3.set_mode("auto")
 
-        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS')
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS', subnet=SUBNET)
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -121,7 +124,6 @@ def delete_slice(slice_obj):
 def test_l2sts_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
-    available_ips = list(SUBNET)[1:]
 
     sites_with_workers = get_sites_with_workers(fablib)
     triplets = make_site_triplets(sites_with_workers)
@@ -160,21 +162,20 @@ def test_l2sts_sharednic_ping(fablib):
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
             iface3 = node3.get_interface(network_name=NETWORK_NAME)
 
-            ip1 = str(available_ips.pop(0))
-            ip2 = str(available_ips.pop(0))
-            ip3 = str(available_ips.pop(0))
-
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-            iface3.ip_addr_add(addr=ip3, subnet=SUBNET)
+            ip1 = iface1.get_ip_addr()
+            ip2 = iface2.get_ip_addr()
+            ip3 = iface3.get_ip_addr()
 
             node1.execute(f"ip addr show {iface1.get_os_interface()}")
             node2.execute(f"ip addr show {iface2.get_os_interface()}")
             node3.execute(f"ip addr show {iface3.get_os_interface()}")
 
-            node1.execute(f"ping -c 5 {ip2}")
-            node1.execute(f"ping -c 5 {ip3}")
-            node2.execute(f"ping -c 5 {ip3}")
+            stdout, _ = node1.execute(f"ping -c 5 {ip2}")
+            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            stdout, _ = node1.execute(f"ping -c 5 {ip3}")
+            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            stdout, _ = node2.execute(f"ping -c 5 {ip3}")
+            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
 
             results[key] = {
                 "state": True,

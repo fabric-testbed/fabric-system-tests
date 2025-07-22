@@ -81,16 +81,18 @@ def make_site_pairs(sites):
 def create_fabnetv6_sharednic_slice(site1, site2, w1, w2):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
-        slice_name = f"test-325-fabnetv6-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        slice_name = f"test-h-325-fabnetv6-{site1.lower()}-{site2.lower()}-{int(time.time())}"
         print(f"[{site1}/{site2}] Creating FABNetv6 slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
 
         node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
         node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
         net1 = slice_obj.add_l3network(name="fabnetv6-net1", interfaces=[iface1], type=NETWORK_TYPE)
         net2 = slice_obj.add_l3network(name="fabnetv6-net2", interfaces=[iface2], type=NETWORK_TYPE)
@@ -110,7 +112,6 @@ def delete_slice(slice_obj):
 def test_fabnetv6_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
-    available_ips = list(SUBNET)[1:]
 
     site_pairs = make_site_pairs(get_sites_with_workers(fablib))
 
@@ -143,23 +144,32 @@ def test_fabnetv6_sharednic_ping(fablib):
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
 
+            net1 = slice_obj.get_network("fabnetv6-net1")
+            net2 = slice_obj.get_network("fabnetv6-net2")
+
+            node1.ip_route_add(
+                    subnet=fablib.FABNETV6_SUBNET,
+                    gateway=net1.get_gateway(),
+            )
+            node2.ip_route_add(
+                subnet=fablib.FABNETV6_SUBNET,
+                gateway=net2.get_gateway(),
+            )
+
             iface1 = node1.get_interface(network_name="fabnetv6-net1")
             iface2 = node2.get_interface(network_name="fabnetv6-net2")
-
-            ip1 = str(available_ips.pop(0))
-            ip2 = str(available_ips.pop(0))
-
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-
-            node1.ip_route_add(subnet=SUBNET, gateway=None)
-            node2.ip_route_add(subnet=SUBNET, gateway=None)
 
             node1.execute(f"ip -6 addr show {iface1.get_os_interface()}")
             node2.execute(f"ip -6 addr show {iface2.get_os_interface()}")
 
-            node1.execute(f"ping6 -c 5 {ip2}")
-            node2.execute(f"ping6 -c 5 {ip1}")
+            ip1 = iface1.get_ip_addr()
+            ip2 = iface2.get_ip_addr()
+
+            ping_out1, _ = node1.execute(f"ping6 -c 5 {ip2}")
+            ping_out2, _ = node2.execute(f"ping6 -c 5 {ip1}")
+
+            if "0% packet loss" not in ping_out1 or "0% packet loss" not in ping_out2:
+                raise Exception("Failed to pass traffic!")
 
             results[key] = {
                 "state": True,

@@ -69,7 +69,7 @@ def create_and_submit_slice(site, gpu_model):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        slice_name = f"test-312-{site_name.lower()}-{gpu_model.lower()}-{int(time.time())}"
+        slice_name = f"test-z-312-{site_name.lower()}-{gpu_model.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)

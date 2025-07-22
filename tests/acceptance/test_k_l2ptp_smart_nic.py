@@ -73,7 +73,7 @@ def create_l2ptp_slice(site1, site2, nic_model):
 
         fablib = FablibManager(fabric_rc=fabric_rc)
 
-        slice_name = f"test-322-l2ptp-{nic_model.lower()}-{site1.lower()}-{site2.lower()}-{int(time.time())}"
+        slice_name = f"test-k-322-l2ptp-{nic_model.lower()}-{site1.lower()}-{site2.lower()}-{int(time.time())}"
         print(f"[{site1}/{site2}] Creating L2PTP slice with {nic_model}: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
@@ -81,12 +81,14 @@ def create_l2ptp_slice(site1, site2, nic_model):
         node1 = slice_obj.add_node(name="node1", site=site1,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface1 = node1.add_component(model=nic_model, name="nic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
         node2 = slice_obj.add_node(name="node2", site=site2,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface2 = node2.add_component(model=nic_model, name="nic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
-        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2], type='L2PTP')
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2], type='L2PTP', subnet=SUBNET)
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -145,14 +147,10 @@ def test_smartnic_l2ptp_across_sites(fablib):
             node2 = slice_obj.get_node("node2")
 
             iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = str(available_ips.pop(0))
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
+            ip1 = iface1.get_ip_addr()
 
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            ip2 = str(available_ips.pop(0))
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
+            ip2 = iface2.get_ip_addr()
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
             assert "0% packet loss" in stdout, f"[{key}] Ping failed"

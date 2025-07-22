@@ -55,7 +55,7 @@ def create_storage_slice(site):
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
         worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
-        slice_name = f"test-313-storage-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-f-313-storage-{site_name.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)

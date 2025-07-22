@@ -69,6 +69,9 @@ def test_site_worker_pair_ping_iperf(fablib):
         if src == dst:
             continue  # Skip same-slice tests
 
+        slices[src].post_boot_config()
+        slices[dst].post_boot_config()
+
         src_node = slices[src].get_node("node")
         dst_node = slices[dst].get_node("node")
         dst_ip = ip_map[dst]

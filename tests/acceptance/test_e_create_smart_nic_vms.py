@@ -56,7 +56,7 @@ def create_smartnic_slice(site, nic_model):
         fablib = FablibManager(fabric_rc=fabric_rc)
 
         site_name = site["name"]
-        slice_name = f"test-312-smartnic-{site_name.lower()}-{nic_model.lower()}-{int(time.time())}"
+        slice_name = f"test-e-312-smartnic-{site_name.lower()}-{nic_model.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating Smart NIC slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)

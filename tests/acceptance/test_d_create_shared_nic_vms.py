@@ -52,7 +52,7 @@ def create_shared_nic_slice(site):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        slice_name = f"test-312-sharednic-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-d-312-sharednic-{site_name.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating Shared NIC slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
