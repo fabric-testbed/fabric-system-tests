@@ -132,8 +132,7 @@ def test_fabnetv4_sharednic_ping(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "exception": f"{e}",
-                    "sliver_errors": slice_obj.get_error_messages()
+                    "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
     for key, slice_obj in slice_objects.items():
@@ -165,16 +164,14 @@ def test_fabnetv4_sharednic_ping(fablib):
 
             results[key] = {
                 "state": True,
-                "exception": "",
-                "sliver_errors": ""
+                "error": ""
             }
         except Exception as e:
             print(f"[{key}] FABNetv4 ping test failed: {e}")
             traceback.print_exc()
             results[key] = {
                 "state": False,
-                "exception": f"{e}",
-                "sliver_errors": slice_obj.get_error_messages()
+                "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
     # Cleanup only successful slices
@@ -186,3 +183,15 @@ def test_fabnetv4_sharednic_ping(fablib):
 
     failed = [f"{site}: {info['exception']} {info['sliver_errors']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"FABNetv4 Shared NIC test failed on: {', '.join(failed)}"
+
+
+def error_message(slice_obj: Slice, exception: Exception):
+
+    try:
+        ret_val = f"{slice_obj.get_name()}/{slice_obj.get_slice_id()} in {slice_obj.get_state()}"
+        for notice in slice_obj.get_error_messages():
+            ret_val += f" {notice.get('reservation_id')} - {notice.get('notice')}"
+
+        return ret_val
+    except Exception:
+        return str(exception)
