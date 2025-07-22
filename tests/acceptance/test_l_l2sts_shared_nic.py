@@ -55,9 +55,13 @@ def get_sites_with_workers(fablib):
             continue
         if site.get(NIC_CAPACITY_FIELD, 0) < 1:
             continue
-        workers = site.get("hosts", 0)
-        if workers >= 2:
+        hosts = site.get("hosts", 0)
+        if hosts >= 2:
+            workers = []
+            for i in range(1, hosts):
+                workers.append(f"{site['name']}-w{i}.fabric-testbed.net")
             result.append((site["name"], sorted(workers)))
+
     return result
 
 
@@ -75,7 +79,6 @@ def make_site_triplets(sites):
         elif len(workers2) >= 1 and len(workers1) >= 2:
             triplets.append((site2, site1, workers2[0], workers1[0], workers1[1]))
     return triplets
-
 
 
 def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):

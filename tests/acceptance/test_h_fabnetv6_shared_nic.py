@@ -55,8 +55,11 @@ def get_sites_with_workers(fablib):
             continue
         if site.get(NIC_CAPACITY_FIELD, 0) < 1:
             continue
-        workers = site.get("hosts", 0)
-        if workers >= 1:
+        hosts = site.get("hosts", 0)
+        if hosts >= 1:
+            workers = []
+            for i in range(1, hosts):
+                workers.append(f"{site['name']}-w{i}.fabric-testbed.net")
             result.append((site["name"], sorted(workers)))
     return result
 
