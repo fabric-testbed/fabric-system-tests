@@ -55,8 +55,8 @@ def get_sites_with_workers(fablib):
             continue
         if site.get(NIC_CAPACITY_FIELD, 0) < 1:
             continue
-        workers = site.get("hosts", [])
-        if len(workers) >= 2:
+        workers = site.get("hosts", 0)
+        if workers >= 2:
             result.append((site["name"], sorted(workers)))
     return result
 
