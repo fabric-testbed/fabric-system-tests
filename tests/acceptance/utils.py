@@ -2,6 +2,9 @@ from fabrictestbed_extensions.fablib.slice import Slice
 
 
 def error_message(slice_obj: Slice, exception: Exception):
+    if "Slice Exception" not in str(exception):
+        return str(exception)
+
     cascade_notice_string1 = "Closing reservation due to failure in slice"
     cascade_notice_string2 = "is in a terminal state"
 

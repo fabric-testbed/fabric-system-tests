@@ -89,9 +89,11 @@ def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
 
         node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
         node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
         net1 = slice_obj.add_l3network(name="fabnetv4-net1", interfaces=[iface1], type=NETWORK_TYPE)
         net2 = slice_obj.add_l3network(name="fabnetv4-net2", interfaces=[iface2], type=NETWORK_TYPE)
@@ -147,20 +149,17 @@ def test_fabnetv4_sharednic_ping(fablib):
             iface1 = node1.get_interface(network_name="fabnetv4-net1")
             iface2 = node2.get_interface(network_name="fabnetv4-net2")
 
-            ip1 = str(available_ips.pop(0))
-            ip2 = str(available_ips.pop(0))
-
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-
-            node1.ip_route_add(subnet=SUBNET, gateway=None)
-            node2.ip_route_add(subnet=SUBNET, gateway=None)
+            ip1 = iface1.get_ip_addr()
+            ip2 = iface2.get_ip_addr()
 
             node1.execute(f"ip addr show {iface1.get_os_interface()}")
             node2.execute(f"ip addr show {iface2.get_os_interface()}")
 
-            node1.execute(f"ping -c 5 {ip2}")
-            node2.execute(f"ping -c 5 {ip1}")
+            ping_out1 = node1.execute(f"ping -c 5 {ip2}")
+            ping_out2 = node2.execute(f"ping -c 5 {ip1}")
+
+            if "0% packet loss" not in ping_out1 or "0% packet loss" not in ping_out2:
+                raise Exception("Failed to pass traffic!")
 
             results[key] = {
                 "state": True,
