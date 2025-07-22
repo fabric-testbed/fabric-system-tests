@@ -141,7 +141,7 @@ def test_l2sts_sharednic_ping(fablib):
             except Exception as e:
                 print(f"[{key}] Slice creation failed: {e}")
                 traceback.print_exc()
-                results[site_name] = {
+                results[key] = {
                     "state": False,
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
@@ -189,11 +189,11 @@ def test_l2sts_sharednic_ping(fablib):
             }
 
     # Cleanup only successful slices
-    for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+    for key, slice_obj in slice_objects.items():
+        if results.get(key, {}).get("state", False):
             delete_slice(slice_obj)
         else:
-            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"L2STS Shared NIC test failed on: {', '.join(failed)}"
