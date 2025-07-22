@@ -132,7 +132,7 @@ def test_fabnetv4_sharednic_ping(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "error": f"{e}",
+                    "exception": f"{e}",
                     "sliver_errors": slice_obj.get_error_messages()
                 }
 
@@ -165,7 +165,7 @@ def test_fabnetv4_sharednic_ping(fablib):
 
             results[key] = {
                 "state": True,
-                "error": "",
+                "exception": "",
                 "sliver_errors": ""
             }
         except Exception as e:
@@ -184,5 +184,5 @@ def test_fabnetv4_sharednic_ping(fablib):
         else:
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']} {info['sliver_errors']}" for site, info in results.items() if not info["state"]]
+    failed = [f"{site}: {info['exception']} {info['sliver_errors']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"FABNetv4 Shared NIC test failed on: {', '.join(failed)}"
