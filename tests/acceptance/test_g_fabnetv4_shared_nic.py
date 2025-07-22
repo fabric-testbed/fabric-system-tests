@@ -186,11 +186,15 @@ def test_fabnetv4_sharednic_ping(fablib):
 
 
 def error_message(slice_obj: Slice, exception: Exception):
+    cascade_notice_string1 = "Closing reservation due to failure in slice"
+    cascade_notice_string2 = "is in a terminal state"
 
     try:
         ret_val = f"{slice_obj.get_name()}/{slice_obj.get_slice_id()} in {slice_obj.get_state()}"
-        for notice in slice_obj.get_error_messages():
-            ret_val += f" {notice.get('reservation_id')} - {notice.get('notice')}"
+        for sliver in slice_obj.get_slivers():
+            if cascade_notice_string1 in sliver.notice or cascade_notice_string2 in sliver.notice:
+                continue
+            ret_val += f" {sliver.sliver_id} - {sliver.notice}"
 
         return ret_val
     except Exception:
