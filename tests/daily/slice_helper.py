@@ -105,10 +105,10 @@ def create_site_worker_slices(fablib, sites):
             if site.get("state") in avoid:
                 continue
             site_obj = fablib.get_resources().get_site(site["name"])
-            for h in site_obj.get_hosts():
+            for h in site_obj.get_hosts().values():
                 if h.get_state() != "Active":
                     continue
-                f = executor.submit(create_slice, site, h)
+                f = executor.submit(create_slice, site, h.get_name())
                 futures[f] = (site, h)
 
         for future in as_completed(futures):

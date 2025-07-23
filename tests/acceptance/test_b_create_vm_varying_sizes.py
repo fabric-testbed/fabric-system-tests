@@ -68,13 +68,13 @@ def create_and_submit_slice(site):
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
         site_obj = fablib.get_resources().get_site(site_name)
-        for h in site_obj.get_hosts():
-            if h.get("state") != "Active":
+        for h in site_obj.get_hosts().values():
+            if h.get_state() != "Active":
                 continue
             slice_obj.add_node(
-                name=h,
+                name=h.get_name(),
                 site=site_name,
-                host=h,
+                host=h.get_name(),
                 cores=VM_CONFIG["cores"],
                 ram=VM_CONFIG["ram"],
                 disk=VM_CONFIG["disk"]
