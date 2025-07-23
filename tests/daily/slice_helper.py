@@ -42,6 +42,7 @@ avoid = os.getenv('FABRIC_AVOID')
 if not avoid or len(avoid) == 0:
     avoid = ["EDUKY"]
 
+
 def get_fablib(fabric_rc=fabric_rc):
     return FablibManager(fabric_rc=fabric_rc)
 
@@ -66,11 +67,11 @@ def create_slice(site, worker):
         with fim_lock:
             fablib = get_fablib()
 
-            slice_name = f"{SLICE_PREFIX}{site_name.lower()}-w{worker}-{int(time.time())}"
+            slice_name = f"{SLICE_PREFIX}-{worker}-{int(time.time())}"
             slice_obj = fablib.new_slice(name=slice_name)
             node = slice_obj.add_node(name="node", site=site_name, cores=4, ram=16, disk=100,
                                       image="docker_rocky_8",
-                                      host=f"{site_name.lower()}-w{worker}.fabric-testbed.net")
+                                      host=worker)
             node.add_fabnet(net_type="IPv4", nic_type='NIC_Basic')
             node.add_post_boot_upload_directory('../scripts/node_tools', '.')
             node.add_post_boot_execute('sudo node_tools/host_tune.sh')
