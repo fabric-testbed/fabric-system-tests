@@ -28,6 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 GPU_MODELS = {
@@ -68,7 +69,7 @@ def create_and_submit_slice(site, gpu_model):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        slice_name = f"test-312-{site_name.lower()}-{gpu_model.lower()}-{int(time.time())}"
+        slice_name = f"test-z-312-{site_name.lower()}-{gpu_model.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
@@ -115,7 +116,10 @@ def test_create_gpu_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{site_name}] Error submitting slice: {e}")
                 traceback.print_exc()
-                results[site_name_gpu_model] = False
+                results[site_name_gpu_model] = {
+                    "state": False,
+                    "error": error_message(slice_obj=slice_obj, exception=e)
+                }
 
     # Wait for all slices to complete provisioning
     for site_name_gpu_model, slice_obj in slice_objects.items():
@@ -123,7 +127,10 @@ def test_create_gpu_vms_per_site(fablib):
         slice_obj.wait_ssh(progress=False)
         slice_obj.post_boot_config()
         success = slice_obj.get_state() in ["StableOK", "StableError"]
-        results[site_name_gpu_model] = success
+        results[site_name] = {
+            "state": success,
+            "error": ""
+        }
 
         if success:
             try:
@@ -158,11 +165,18 @@ def test_create_gpu_vms_per_site(fablib):
                 assert "NVIDIA" in stdout, f"{slice_name} - GPU not detected by nvidia-smi"
             except Exception as e:
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
-                results[site_name_gpu_model] = False
+                results[site_name_gpu_model] = {
+                    "state": False,
+                    "error": error_message(slice_obj=slice_obj, exception=e)
+                }
 
     # Cleanup
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [site for site, passed in results.items() if not passed]
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice with GPUs failed on: {', '.join(failed)}"

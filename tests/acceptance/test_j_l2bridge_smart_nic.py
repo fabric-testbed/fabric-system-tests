@@ -28,13 +28,14 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 
-NIC_MODEL = 'NIC_Basic'
+SMART_NIC_MODELS = ['NIC_ConnectX_5', 'NIC_ConnectX_6']
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
 MAX_PARALLEL_SITES = 5
-WORKER_TEMPLATE = "{}-w{}.fabric-testbed.net"
 NETWORK_NAME = "l2-bridge"
 SUBNET = IPv4Network("192.168.1.0/24")
 
@@ -50,29 +51,28 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_local_bridge_sharednic_slice(site):
+def create_smartnic_bridge_slice(site, nic_type1, nic_type2):
     with fim_lock:
 
         fablib = FablibManager(fabric_rc=fabric_rc)
 
         site_name = site["name"]
-        slice_name = f"test-321-sharednic-bridge-{site_name.lower()}-{int(time.time())}"
+        slice_name = f"test-j-321-smartnic-{nic_type1.lower()}-{nic_type2.lower()}-{site_name.lower()}-{int(time.time())}"
         print(f"[{site_name}] Creating slice: {slice_name}")
-
-        worker1 = WORKER_TEMPLATE.format(site_name.lower(), 1)
-        worker2 = WORKER_TEMPLATE.format(site_name.lower(), 2)
 
         slice_obj = fablib.new_slice(name=slice_name)
 
-        node1 = slice_obj.add_node(name="node1", site=site_name, host=worker1,
+        node1 = slice_obj.add_node(name="node1", site=site_name,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-        iface1 = node1.add_component(model=NIC_MODEL, name="sharednic1").get_interfaces()[0]
+        iface1 = node1.add_component(model=nic_type1, name="smartnic1").get_interfaces()[0]
+        iface1.set_mode("auto")
 
-        node2 = slice_obj.add_node(name="node2", site=site_name, host=worker2,
+        node2 = slice_obj.add_node(name="node2", site=site_name,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-        iface2 = node2.add_component(model=NIC_MODEL, name="sharednic2").get_interfaces()[0]
+        iface2 = node2.add_component(model=nic_type2, name="smartnic2").get_interfaces()[0]
+        iface2.set_mode("auto")
 
-        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2])
+        slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2], subnet=SUBNET)
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -85,17 +85,19 @@ def delete_slice(slice_obj):
         print(f"[{slice_obj.get_name()}] Slice deletion error: {e}")
 
 
-def test_sharednic_local_bridge_reachability(fablib):
+def test_smartnic_local_bridge_reachability(fablib):
     sites = get_active_sites(fablib)
     results = {}
     slice_objects = {}
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
-        future_to_site = {
-            executor.submit(create_local_bridge_sharednic_slice, site): site["name"]
-            for site in sites
-            if site.get("nic_basic_capacity", 0) >= 2
-        }
+        future_to_site = {}
+        for site in sites:
+            connectx5 = site.get("nic_connectx_5_capacity", 0)
+            connectx6 = site.get("nic_connectx_6_capacity", 0)
+            if connectx5 >= 1 and connectx6 >= 1:
+                future = executor.submit(create_smartnic_bridge_slice, site, "NIC_ConnectX_5", "NIC_ConnectX_6")
+                future_to_site[future] = site["name"]
 
         for future in as_completed(future_to_site):
             site_name = future_to_site[future]
@@ -105,9 +107,11 @@ def test_sharednic_local_bridge_reachability(fablib):
             except Exception as e:
                 print(f"[{site_name}] Slice submission failed: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": error_message(slice_obj=slice_obj, exception=e)
+                }
 
-    available_ips = list(SUBNET)[1:]
     for site_name, slice_obj in slice_objects.items():
         try:
             slice_obj.wait(progress=False)
@@ -117,30 +121,35 @@ def test_sharednic_local_bridge_reachability(fablib):
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
 
-            # Configure Node1
+            # Assign IPs
             iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = str(available_ips.pop(0))
-            iface1.ip_addr_add(addr=ip1, subnet=SUBNET)
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
+            ip1 = iface1.get_ip_addr()
 
-            # Configure Node2
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            ip2 = str(available_ips.pop(0))
-            iface2.ip_addr_add(addr=ip2, subnet=SUBNET)
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
+            ip2 = iface2.get_ip_addr()
 
-            # Test ping
+            # Test reachability
             stdout, stderr = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{site_name}] Ping failed between nodes"
-            results[site_name] = True
+            assert "0% packet loss" in stdout, f"[{site_name}] Ping failed"
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
 
         except Exception as e:
-            print(f"[{site_name}] Local bridge test failed: {e}")
+            print(f"[{site_name}] Smart NIC bridge test failed: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": error_message(slice_obj=slice_obj, exception=e)
+            }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [site for site, ok in results.items() if not ok]
-    assert not failed, f"Local bridge test failed on: {', '.join(failed)}"
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    assert not failed, f"Smart NIC bridge test failed on: {', '.join(failed)}"

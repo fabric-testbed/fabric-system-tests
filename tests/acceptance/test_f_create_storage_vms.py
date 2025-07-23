@@ -27,11 +27,14 @@ import traceback
 import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from tests.acceptance.utils import error_message
 from tests.base_test import fabric_rc, fim_lock
 
 
-NVME_MODEL = 'NVME_P4510'
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
+STORAGE_NAME = "acceptance-testing"
+WORKER_SUFFIX = "w1.fabric-testbed.net"
 MAX_PARALLEL_SITES = 5
 
 
@@ -46,18 +49,20 @@ def get_active_sites(fablib):
     return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
 
 
-def create_nvme_slice(site):
+def create_storage_slice(site):
     with fim_lock:
+
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        slice_name = f"test-312-nvme-{site_name.lower()}-{int(time.time())}"
-        print(f"[{site_name}] Creating NVMe slice: {slice_name}")
+        worker = f"{site_name.lower()}-{WORKER_SUFFIX}"
+        slice_name = f"test-f-313-storage-{site_name.lower()}-{int(time.time())}"
+        print(f"[{site_name}] Creating slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
-        node = slice_obj.add_node(name="nvme-node", site=site_name,
-                                  cores=VM_CONFIG["cores"],
+        node = slice_obj.add_node(name="storage-node", site=site_name,
+                                  host=worker, cores=VM_CONFIG["cores"],
                                   ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
-        node.add_component(model=NVME_MODEL, name="nvme1")
+        node.add_storage(name=STORAGE_NAME)
         slice_obj.submit(wait=False)
         return slice_obj
 
@@ -70,61 +75,74 @@ def delete_slice(slice_obj):
         print(f"[{slice_obj.get_name()}] Slice deletion error: {e}")
 
 
-def test_create_nvme_vms_per_site(fablib):
+def test_attached_storage_parallel(fablib):
     sites = get_active_sites(fablib)
     results = {}
+    slice_objects = {}
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_SITES) as executor:
-        future_to_site = {}
-        for site in sites:
-            # Check NVME_P4510 availability before submitting
-            if site.get('nvme_capacity', 0) < 2:
-                continue
-            future = executor.submit(create_nvme_slice, site)
-            future_to_site[future] = site["name"]
+        future_to_site = {
+            executor.submit(create_storage_slice, site): site["name"]
+            for site in sites
+        }
 
-        slice_objects = {}
         for future in as_completed(future_to_site):
             site_name = future_to_site[future]
             try:
                 slice_obj = future.result()
                 slice_objects[site_name] = slice_obj
             except Exception as e:
-                print(f"[{site_name}] Slice submission error: {e}")
+                print(f"[{site_name}] Slice submission failed: {e}")
                 traceback.print_exc()
-                results[site_name] = False
+                results[site_name] = {
+                    "state": False,
+                    "error": error_message(slice_obj=slice_obj, exception=e)
+                }
 
     for site_name, slice_obj in slice_objects.items():
         try:
             slice_obj.wait(progress=False)
             slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
-            node = slice_obj.get_node("nvme-node")
 
-            # Confirm NVMe devices are visible
-            print(f"[{site_name}] Checking NVMe devices via lspci...")
-            cmd = "sudo dnf install -y -q pciutils && lspci | grep -i nvme"
-            stdout, stderr = node.execute(cmd)
-            assert 'Non-Volatile memory controller' in stdout, f"[{site_name}] NVMe not detected"
+            node = slice_obj.get_node("storage-node")
+            storage = node.get_storage(STORAGE_NAME)
+            device = storage.get_device_name()
+            print(f"[{site_name}] Storage device: {device}")
 
-            # Configure NVMe drives
-            nvme1 = node.get_component("nvme1")
-            nvme2 = node.get_component("nvme2")
-            nvme1.configure_nvme()
-            nvme2.configure_nvme()
+            # Format volume
+            node.execute(f"sudo mkfs.ext4 {device}")
 
-            # Confirm partitions
-            stdout, stderr = node.execute("sudo fdisk -l")
-            assert "Disk /dev" in stdout, f"[{site_name}] No disk partitions found after configuration"
+            # Mount volume
+            node.execute(
+                f"sudo mkdir -p /mnt/fabric_storage && "
+                f"sudo mount {device} /mnt/fabric_storage && "
+                f"df -h"
+            )
 
-            results[site_name] = True
+            # Verify write
+            node.execute("sudo dd if=/dev/zero of=/mnt/fabric_storage/zero-file bs=1024 count=1024")
+            stdout, _ = node.execute("ls -lh /mnt/fabric_storage")
+            assert "zero-file" in stdout, f"[{site_name}] Write verification failed"
+
+            results[site_name] = {
+                "state": True,
+                "error": ""
+            }
         except Exception as e:
-            print(f"[{site_name}] NVMe validation error: {e}")
+            print(f"[{site_name}] Storage test failed: {e}")
             traceback.print_exc()
-            results[site_name] = False
+            results[site_name] = {
+                "state": False,
+                "error": error_message(slice_obj=slice_obj, exception=e)
+            }
 
-    for slice_obj in slice_objects.values():
-        delete_slice(slice_obj)
+    # Cleanup only successful slices
+    for site_name, slice_obj in slice_objects.items():
+        if results.get(site_name, {}).get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [site for site, success in results.items() if not success]
-    assert not failed, f"NVMe attachment failed on: {', '.join(failed)}"
+    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    assert not failed, f"Attached storage test failed on: {', '.join(failed)}"

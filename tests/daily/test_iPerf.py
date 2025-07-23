@@ -69,6 +69,9 @@ def test_site_worker_pair_ping_iperf(fablib):
         if src == dst:
             continue  # Skip same-slice tests
 
+        slices[src].post_boot_config()
+        slices[dst].post_boot_config()
+
         src_node = slices[src].get_node("node")
         dst_node = slices[dst].get_node("node")
         dst_ip = ip_map[dst]
@@ -108,8 +111,8 @@ def test_site_worker_pair_ping_iperf(fablib):
     # Step 7: Summary and cleanup
     if failed_slices:
         print("\nThe following slices failed to create:")
-        for s in failed_slices:
-            print(f" - {s}")
+        for s_name, error in failed_slices.items():
+            print(f" - {s_name}: {error}")
     else:
         print("\nAll slices created successfully.")
 
