@@ -59,31 +59,22 @@ def get_sites_with_workers(fablib):
             continue
         hosts = site.get("hosts", 0)
         if hosts >= 2:
-            workers = []
-            for i in range(1, hosts):
-                workers.append(f"{site['name'].lower()}-w{i}.fabric-testbed.net")
-            result.append((site["name"], sorted(workers)))
+            result.append(site["name"])
 
     return result
 
 
-def make_site_triplets(sites):
+def make_site_pairs(site_list):
     """
-    Return all unique (site1, site2, worker1, worker2, worker3) triplets.
-    - site1 must have ≥1 worker
-    - site2 must have ≥2 workers
-    - Each pair is unique and (site1 ≠ site2)
+    Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
+    Each site appears at most once across all pairs.
     """
-    triplets = []
-    for (site1, workers1), (site2, workers2) in combinations(sites, 2):
-        if len(workers1) >= 1 and len(workers2) >= 2:
-            triplets.append((site1, site2, workers1[0], workers2[0], workers2[1]))
-        elif len(workers2) >= 1 and len(workers1) >= 2:
-            triplets.append((site2, site1, workers2[0], workers1[0], workers1[1]))
-    return triplets
+    site_names = [site["name"] for site in site_list]
+    num_pairs = len(site_names) // 2
+    return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
 
-def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
+def create_l2sts_sharednic_slice(site1, site2):
     with fim_lock:
 
         fablib = FablibManager(fabric_rc=fabric_rc)
@@ -94,17 +85,17 @@ def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
         slice_obj = fablib.new_slice(name=slice_name)
 
         # Node1 on site1 worker1
-        node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
+        node1 = slice_obj.add_node(name="node1", site=site1, host=f"{site1.lower()}-w1.fabric-testbed.net")
         iface1 = node1.add_component(model='NIC_Basic', name="nic1").get_interfaces()[0]
         iface1.set_mode("auto")
 
         # Node2 on site1 worker2
-        node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
+        node2 = slice_obj.add_node(name="node2", site=site2, host=f"{site2.lower()}-w1.fabric-testbed.net")
         iface2 = node2.add_component(model='NIC_Basic', name="nic2").get_interfaces()[0]
         iface2.set_mode("auto")
 
         # Node3 on site2 worker3
-        node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
+        node3 = slice_obj.add_node(name="node3", site=site2, host=f"{site2.lower()}-w2.fabric-testbed.net")
         iface3 = node3.add_component(model='NIC_Basic', name="nic3").get_interfaces()[0]
         iface3.set_mode("auto")
 
@@ -126,12 +117,12 @@ def test_l2sts_sharednic_ping(fablib):
     slice_objects = {}
 
     sites_with_workers = get_sites_with_workers(fablib)
-    triplets = make_site_triplets(sites_with_workers)
+    site_pairs = make_site_pairs(sites_with_workers)
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_triplet = {
-            executor.submit(create_l2sts_sharednic_slice, site1, site2, w1, w2, w3): (site1, site2)
-            for site1, site2, w1, w2, w3 in triplets
+            executor.submit(create_l2sts_sharednic_slice, site1, site2): (site1, site2)
+            for site1, site2 in site_pairs
         }
 
         for future in as_completed(future_to_triplet):

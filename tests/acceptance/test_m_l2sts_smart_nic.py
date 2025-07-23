@@ -55,11 +55,9 @@ def get_sites_with_smartnic(fablib):
     for site in fablib.list_sites(output="list"):
         if site.get("state") != "Active":
             continue
-        if site.get(NIC_CAPACITY_FIELD, 0) < 1:
+        if site.get(NIC_CAPACITY_FIELD, 0) < 2:
             continue
-        workers = site.get("hosts", [])
-        if len(workers) >= 2:
-            result.append(site["name"])
+        result.append(site["name"])
     return result
 
 
