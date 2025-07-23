@@ -34,7 +34,7 @@ from fabrictestbed_extensions.fablib.slice import Slice
 
 from tests.base_test import fabric_rc, fim_lock
 
-SLICE_PREFIX = "iperf@"
+SLICE_PREFIX = "iperf"
 DEFAULT_IMAGE = "default_ubuntu_22"
 NIC_MODEL = "NIC_Basic"
 MAX_PARALLEL = 4
