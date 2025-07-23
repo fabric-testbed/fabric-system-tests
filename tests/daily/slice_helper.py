@@ -22,12 +22,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-import json
 import os
 import random
 import time
 import traceback
-from itertools import product, combinations
+from itertools import combinations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from fabrictestbed_extensions.fablib.slice import Slice
@@ -174,7 +173,3 @@ def cleanup_slices(slices, slices_to_keep):
         except Exception as e:
             print(f"Error deleting slice {name}: {e}")
 
-
-def save_results_json(results, filename="iperf_test_results.json"):
-    with open(filename, "w") as f:
-        json.dump(results, f, indent=2)

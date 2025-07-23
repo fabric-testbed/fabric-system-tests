@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -133,7 +133,9 @@ def test_sharednic_local_bridge_reachability(fablib):
 
             # Test ping
             stdout, stderr = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{site_name}] Ping failed between nodes"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{site_name}] Ping failed between nodes")
+
             results[site_name] = {
                 "state": True,
                 "error": ""
@@ -147,12 +149,18 @@ def test_sharednic_local_bridge_reachability(fablib):
                 "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="l2bridge_shared.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Local bridge test failed on: {', '.join(failed)}"

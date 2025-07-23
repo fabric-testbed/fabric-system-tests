@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-from itertools import combinations
 
 import pytest
 import traceback
@@ -31,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -153,7 +152,9 @@ def test_smartnic_l2ptp_across_sites(fablib):
             ip2 = iface2.get_ip_addr()
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
+
             results[key] = {
                 "state": True,
                 "error": ""
@@ -167,12 +168,18 @@ def test_smartnic_l2ptp_across_sites(fablib):
                 "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="l2ptp_smart_nic.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"L2PTP SmartNIC tests failed on: {', '.join(failed)}"

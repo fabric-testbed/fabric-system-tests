@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 VM_CONFIG = {
@@ -131,9 +131,10 @@ def test_non_blocking_vm_creation(fablib):
 
             # Validation checks
             for node in slice_obj.get_nodes():
-                assert node.get_cores() >= VM_CONFIG["cores"], node.get_error_message()
-                assert node.get_ram() >= VM_CONFIG["ram"], node.get_error_message()
-                assert node.get_disk() >= VM_CONFIG["disk"], node.get_error_message()
+                if node.get_cores() >= VM_CONFIG["cores"] or \
+                        node.get_ram() >= VM_CONFIG["ram"] or \
+                        node.get_disk() >= VM_CONFIG["disk"]:
+                    raise Exception("VM Validation Failed!")
             print(f"[{site_name}] Validation successful.")
 
         except Exception as e:
@@ -142,13 +143,18 @@ def test_non_blocking_vm_creation(fablib):
             results[site_name] = {"state": False,
                                   "error": error_message(slice_obj=slice_obj, exception=e)}
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="varying_size_vm_create.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
-

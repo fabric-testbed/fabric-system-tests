@@ -1,8 +1,10 @@
+import json
+
 from fabrictestbed_extensions.fablib.slice import Slice
 
 
-def error_message(slice_obj: Slice, exception: Exception):
-    if "Slice Exception" not in str(exception):
+def error_message(slice_obj: Slice, exception: Exception = None):
+    if exception and "Slice Exception" not in str(exception):
         return str(exception)
 
     cascade_notice_string1 = "Closing reservation due to failure in slice"
@@ -17,4 +19,12 @@ def error_message(slice_obj: Slice, exception: Exception):
 
         return ret_val
     except Exception:
-        return str(exception)
+        if exception:
+            return str(exception)
+        else:
+            return "Fail"
+
+
+def save_results_json(results, filename="iperf_test_results.json"):
+    with open(filename, "w") as f:
+        json.dump(results, f, indent=2)

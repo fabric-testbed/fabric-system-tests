@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -111,9 +111,8 @@ def test_create_shared_nic_vms_per_site(fablib):
             print(f"[{site_name}] Checking Shared NIC device via lspci...")
             cmd = "sudo dnf install -y -q pciutils && lspci | grep -i Virtual"
             stdout, stderr = node.execute(cmd)
-            assert "Mellanox Technologies" in stdout and "Virtual Function" in stdout, \
-                f"[{site_name}] Shared NIC not detected"
-
+            if "Mellanox Technologies" in stdout and "Virtual Function" not in stdout:
+                raise Exception("SharedNIC not detected")
             results[site_name] = {
                 "state": True,
                 "error": ""
@@ -126,12 +125,18 @@ def test_create_shared_nic_vms_per_site(fablib):
                 "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="shared_nic.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Shared NIC attachment failed on: {', '.join(failed)}"

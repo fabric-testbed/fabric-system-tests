@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 GPU_MODELS = {
@@ -162,7 +162,8 @@ def test_create_gpu_vms_per_site(fablib):
 
                 print(f"[{slice_name}] Running nvidia-smi...")
                 stdout, stderr = node.execute("nvidia-smi")
-                assert "NVIDIA" in stdout, f"{slice_name} - GPU not detected by nvidia-smi"
+                if "NVIDIA" not in stdout:
+                    raise Exception(f"{slice_name} - GPU not detected by nvidia-smi")
             except Exception as e:
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
                 results[site_name_gpu_model] = {
@@ -170,13 +171,18 @@ def test_create_gpu_vms_per_site(fablib):
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
-    # Cleanup
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
-    for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+    for key, slice_obj in slice_objects.items():
+        site_info = results.get(key, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
-            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+            print(f"{key}: {site_info.get('error')}")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="gpu.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice with GPUs failed on: {', '.join(failed)}"

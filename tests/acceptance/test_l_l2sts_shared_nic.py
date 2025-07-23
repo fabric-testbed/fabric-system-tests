@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-from itertools import combinations
 
 import pytest
 import traceback
@@ -31,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -161,11 +160,14 @@ def test_l2sts_sharednic_ping(fablib):
             node3.execute(f"ip addr show {iface3.get_os_interface()}")
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
             stdout, _ = node1.execute(f"ping -c 5 {ip3}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
             stdout, _ = node2.execute(f"ping -c 5 {ip3}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
 
             results[key] = {
                 "state": True,
@@ -185,6 +187,19 @@ def test_l2sts_sharednic_ping(fablib):
             delete_slice(slice_obj)
         else:
             print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
+
+    print("TEST SUMMARY==========================================================================================")
+    # Cleanup only successful slices
+    for key, slice_obj in slice_objects.items():
+        site_info = results.get(key, {})
+        if site_info.get("state", False):
+            delete_slice(slice_obj)
+        else:
+            print(f"{key}: {site_info.get('error')}")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="l2sts_shared.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"L2STS Shared NIC test failed on: {', '.join(failed)}"

@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -115,12 +115,13 @@ def test_create_smartnic_vms_per_site(fablib):
             cmd = "sudo dnf install -y -q pciutils && lspci | grep -i ConnectX"
             stdout, stderr = node.execute(cmd)
 
-            assert ("ConnectX-6" in stdout or "ConnectX-5" in stdout), \
-                f"[{key}] Smart NIC not detected in lspci"
+            if "ConnectX-6" not in stdout or "ConnectX-5" not in stdout:
+                raise Exception(f"[{key}] Smart NIC not detected in lspci")
 
             # Should see 4 entries: 2 cards × 2 ports
             nic_count = stdout.count("Ethernet controller: Mellanox Technologies")
-            assert nic_count >= 2, f"[{key}] Expected >=2 NIC entries, found {nic_count}"
+            if nic_count < 2:
+                raise Exception(f"[{key}] Expected >=2 NIC entries, found {nic_count}")
 
             results[site_name] = {
                 "state": True,
@@ -134,12 +135,18 @@ def test_create_smartnic_vms_per_site(fablib):
                 "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="smart_nic.json")
+    print("TEST SUMMARY==========================================================================================")
 
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
     assert not failed, f"Smart NIC attachment failed on: {', '.join(failed)}"

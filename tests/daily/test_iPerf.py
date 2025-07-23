@@ -23,6 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 import pytest
+from tests.utils import save_results_json
 from tests.daily.slice_helper import (
     get_fablib,
     delete_existing_slices,
@@ -33,7 +34,6 @@ from tests.daily.slice_helper import (
     collect_node_ips,
     run_remote_command,
     cleanup_slices,
-    save_results_json
 )
 
 DOCKER_IMAGE = 'pruth/fabric-multitool-rockylinux9:latest'
