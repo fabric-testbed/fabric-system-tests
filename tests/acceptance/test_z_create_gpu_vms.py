@@ -142,12 +142,12 @@ def test_create_gpu_vms_per_site(fablib):
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y pciutils && lspci | grep 'NVIDIA|3D controller'",
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get -q update",
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get -q install -y linux-headers-$(uname -r) gcc"
-                    'sudo apt-get update -q',
-                    'sudo apt-get install -y linux-headers-$(uname -r) gcc',
+                    'sudo DEBIAN_FRONTEND=noninteractive apt-get update -q',
+                    'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y linux-headers-$(uname -r) gcc',
                     f'wget https://developer.download.nvidia.com/compute/cuda/repos/{distro}/{architecture}/cuda-keyring_1.1-1_all.deb',
                     f'sudo DEBIAN_FRONTEND=noninteractive dpkg -i cuda-keyring_1.1-1_all.deb',
                     f'sudo DEBIAN_FRONTEND=noninteractive apt-get -q update',
-                    f'sudo apt-get -q install -y cuda-{version.replace(".", "-")}'
+                    f'sudo DEBIAN_FRONTEND=noninteractive apt-get -q install -y cuda-{version.replace(".", "-")}'
                 ]
 
                 for cmd in setup_cmds:
