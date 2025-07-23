@@ -63,16 +63,18 @@ def create_and_submit_slice(site):
 
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        worker_count = site["hosts"]
         slice_name = f"test-b-311-varying-size-{site_name.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
-        for w in range(1, worker_count+1):
+        site_obj = fablib.get_resources().get_site(site_name)
+        for h in site_obj.get_hosts():
+            if h.get("state") != "Active":
+                continue
             slice_obj.add_node(
-                name=f"{site_name.lower()}-w{w}",
+                name=h,
                 site=site_name,
-                host=f"{site_name.lower()}-w{w}.fabric-testbed.net",
+                host=h,
                 cores=VM_CONFIG["cores"],
                 ram=VM_CONFIG["ram"],
                 disk=VM_CONFIG["disk"]
