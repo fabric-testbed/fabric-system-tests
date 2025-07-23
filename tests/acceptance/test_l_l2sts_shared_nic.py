@@ -64,12 +64,11 @@ def get_sites_with_workers(fablib):
     return result
 
 
-def make_site_pairs(site_list):
+def make_site_pairs(site_names):
     """
     Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
     Each site appears at most once across all pairs.
     """
-    site_names = [site["name"] for site in site_list]
     num_pairs = len(site_names) // 2
     return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
