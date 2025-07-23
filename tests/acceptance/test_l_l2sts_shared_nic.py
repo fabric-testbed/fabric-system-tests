@@ -95,17 +95,17 @@ def create_l2sts_sharednic_slice(site1, site2, w1, w2, w3):
 
         # Node1 on site1 worker1
         node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
-        iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
+        iface1 = node1.add_component(model='NIC_Basic', name="nic1").get_interfaces()[0]
         iface1.set_mode("auto")
 
         # Node2 on site1 worker2
         node2 = slice_obj.add_node(name="node2", site=site1, host=w2)
-        iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
+        iface2 = node2.add_component(model='NIC_Basic', name="nic2").get_interfaces()[0]
         iface2.set_mode("auto")
 
         # Node3 on site2 worker3
         node3 = slice_obj.add_node(name="node3", site=site2, host=w3)
-        iface3 = node3.add_component(model=NIC_MODEL, name="nic3").get_interfaces()[0]
+        iface3 = node3.add_component(model='NIC_Basic', name="nic3").get_interfaces()[0]
         iface3.set_mode("auto")
 
         slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2, iface3], type='L2STS', subnet=SUBNET)

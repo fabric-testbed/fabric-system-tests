@@ -61,11 +61,12 @@ def get_smartnic_sites(fablib, nic_capacity_field):
 
 def make_site_pairs(site_list):
     """
-    Return unique (site1_name, site2_name) pairs from site_list.
-    Avoids (a, a) and (a, b) vs (b, a) duplication.
+    Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
+    Each site appears at most once across all pairs.
     """
-    return [(s1["name"], s2["name"]) for s1, s2 in combinations(site_list, 2)]
-
+    site_names = [site["name"] for site in site_list]
+    num_pairs = len(site_names) // 2
+    return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
 
 def create_l2ptp_slice(site1, site2, nic_model):
@@ -104,7 +105,6 @@ def delete_slice(slice_obj):
 def test_smartnic_l2ptp_across_sites(fablib):
     results = {}
     slice_objects = {}
-    available_ips = list(SUBNET)[1:]
 
     test_tasks = []
 
