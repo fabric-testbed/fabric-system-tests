@@ -64,6 +64,7 @@ def test_site_worker_pair_ping_iperf(fablib):
     pairs = get_site_pairs(slices)
 
     print("\nRunning ping and iperf3 tests across all slice pairs...")
+    slices_to_keep = []
 
     for src, dst in pairs:
         if src == dst:
@@ -88,6 +89,8 @@ def test_site_worker_pair_ping_iperf(fablib):
             pair_result["ping"] = "PASS"
         else:
             pair_result["ping"] = f"FAIL: {ping_err or ping_out.strip().splitlines()[-1]}"
+            slices_to_keep.append(slices[src].get_slice_id())
+            slices_to_keep.append(slices[dst].get_slice_id())
 
         # Start iperf3 server on destination
         iperf_cmd_server = f"docker run -d --rm --network host {DOCKER_IMAGE} iperf3 -s -1 > /dev/null 2>&1"
@@ -102,33 +105,47 @@ def test_site_worker_pair_ping_iperf(fablib):
             pair_result["iperf3"] = "PASS"
         else:
             pair_result["iperf3"] = f"FAIL: {iperf_err or iperf_out.strip().splitlines()[-1]}"
+            slices_to_keep.append(slices[src].get_slice_id())
+            slices_to_keep.append(slices[dst].get_slice_id())
 
         results[pair_key] = pair_result
 
     # Step 6: Save results
     save_results_json(results)
+    save_results_json(failed_slices, "slice_creation_failures.json")
 
     # Step 7: Summary and cleanup
+    print("TEST SUMMARY==========================================================================================")
     if failed_slices:
-        print("\nThe following slices failed to create:")
+        print("\nFAILED - Slice Creation")
         for s_name, error in failed_slices.items():
             print(f" - {s_name}: {error}")
     else:
-        print("\nAll slices created successfully.")
+        print("\nPASS - Slice Creation")
 
-    failed = {pair: r for pair, r in results.items() if "FAIL" in r["ping"] or "FAIL" in r["iperf3"]}
-    if failed:
-        print("\nFailures:")
-        for k, v in failed.items():
+    ping_failures = {pair: r for pair, r in results.items() if "FAIL" in r["ping"]}
+    if ping_failures or len(ping_failures):
+        print("\nFAILED - Ping")
+        for k, v in ping_failures.items():
             print(f"{k}: {v}")
     else:
-        print("\nAll site-worker pairs passed.")
-        cleanup_slices(slices)
+        print("\nPASS - Ping")
 
-    #assert not failed, f"Some slice pairs failed: {', '.join(failed.keys())}"
+    iperf3_failures = {pair: r for pair, r in results.items() if "FAIL" in r["iperf3"]}
+    if iperf3_failures or len(iperf3_failures):
+        print("\nFAILED - iPerf3")
+        for k, v in iperf3_failures.items():
+            print(f"{k}: {v}")
+    else:
+        print("\nPASS - iPerf3")
+
+    failed = {pair: r for pair, r in results.items() if "FAIL" in r["ping"] or "FAIL" in r["iperf3"]}
+    cleanup_slices(slices, slices_to_keep)
+
     assert not failed and not failed_slices, (
         f"Some tests failed.\n"
         f"Failed slice pairs: {', '.join(failed.keys()) if failed else 'None'}\n"
         f"Failed to create slices: {', '.join(failed_slices) if failed_slices else 'None'}"
     )
+    print("TEST SUMMARY==========================================================================================")
 

@@ -96,12 +96,21 @@ def create_site_worker_slices(fablib, sites):
     failed_slices = {}
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
-        futures = {
-            executor.submit(create_slice, site, worker): (site, worker)
-            for site in sites
-            if site["name"] not in avoid
-            for worker in range(1, site["hosts"] + 1)
-        }
+        futures = {}
+        for site in sites:
+            if site.get("name") == "EDUKY":
+                continue
+            if site.get("state") != "Active":
+                continue
+            if site.get("state") in avoid:
+                continue
+            site_obj = fablib.get_resources().get_site(site["name"])
+            for h in site_obj.get_hosts():
+                if h.get_state() != "Active":
+                    continue
+                f = executor.submit(create_slice, site, h)
+                futures[f] = (site, h)
+
         for future in as_completed(futures):
             site_worker = futures[future]
             try:
@@ -154,9 +163,11 @@ def run_remote_command(node, cmd):
         return "", str(e)
 
 
-def cleanup_slices(slices):
+def cleanup_slices(slices, slices_to_keep):
     for name, slice_obj in slices.items():
         try:
+            if slice_obj.get_slice_id() in slices_to_keep:
+                continue
             print(f"Deleting slice {name}")
             slice_obj.delete()
         except Exception as e:
