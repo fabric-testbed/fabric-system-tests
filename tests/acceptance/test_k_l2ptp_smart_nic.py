@@ -105,6 +105,8 @@ def test_smartnic_l2ptp_across_sites(fablib):
         site_names = [site["name"] for site in sites]
         site_pairs = make_site_pairs(site_names)
         for site1, site2 in site_pairs:
+            if site1 == site2:
+                continue
             test_tasks.append((site1, site2, nic_model))
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_TESTS) as executor:

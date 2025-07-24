@@ -112,6 +112,7 @@ def test_l2sts_sharednic_ping(fablib):
         future_to_triplet = {
             executor.submit(create_l2sts_sharednic_slice, site1, site2): (site1, site2)
             for site1, site2 in site_pairs
+            if site1 != site2
         }
 
         for future in as_completed(future_to_triplet):
