@@ -185,6 +185,7 @@ def test_l2sts_smartnic_ping(fablib):
     for key, slice_obj in slice_objects.items():
         site_info = results.get(key, {})
         if site_info.get("state", False):
+            print(f"{key}: PASS")
             delete_slice(slice_obj)
         else:
             print(f"{key}: {site_info.get('error')}")
@@ -193,5 +194,6 @@ def test_l2sts_smartnic_ping(fablib):
     save_results_json(results, filename="l2sts_smart_nic.json")
     print("TEST SUMMARY==========================================================================================")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"L2STS SmartNIC test failed on: {', '.join(failed)}"

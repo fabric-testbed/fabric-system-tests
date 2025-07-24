@@ -154,6 +154,7 @@ def test_sharednic_local_bridge_reachability(fablib):
     for site_name, slice_obj in slice_objects.items():
         site_info = results.get(site_name, {})
         if site_info.get("state", False):
+            print(f"{site_name}: PASS")
             delete_slice(slice_obj)
         else:
             print(f"{site_name}: {site_info.get('error')}")
@@ -162,5 +163,6 @@ def test_sharednic_local_bridge_reachability(fablib):
     save_results_json(results, filename="l2bridge_shared.json")
     print("TEST SUMMARY==========================================================================================")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"Local bridge test failed on: {', '.join(failed)}"

@@ -145,7 +145,7 @@ def test_site_worker_pair_ping_iperf(fablib):
     assert not failed and not failed_slices, (
         f"Some tests failed.\n"
         f"Failed slice pairs: {', '.join(failed.keys()) if failed else 'None'}\n"
-        f"Failed to create slices: {', '.join(failed_slices) if failed_slices else 'None'}"
+        f"Failed to create slices: {', '.join(failed_slices.keys()) if failed_slices else 'None'}"
     )
     print("TEST SUMMARY==========================================================================================")
 

@@ -148,6 +148,7 @@ def test_non_blocking_vm_creation(fablib):
     for site_name, slice_obj in slice_objects.items():
         site_info = results.get(site_name, {})
         if site_info.get("state", False):
+            print(f"{site_name}: PASS")
             delete_slice(slice_obj)
         else:
             print(f"{site_name}: {site_info.get('error')}")
@@ -156,5 +157,6 @@ def test_non_blocking_vm_creation(fablib):
     save_results_json(results, filename="varying_size_vm_create.json")
     print("TEST SUMMARY==========================================================================================")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice creation failed on: {', '.join(failed)}"
