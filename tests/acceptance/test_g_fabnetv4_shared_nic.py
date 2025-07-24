@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-from tests.utils import error_message, save_results_json, make_site_pairs
+from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -110,12 +110,11 @@ def test_fabnetv4_sharednic_ping(fablib):
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
+    wait_and_configure_slices(slice_objects)
+
     for site_name, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
-
             node1 = slice_obj.get_node("node1")
             net1 = slice_obj.get_network("fabnetv4-net1")
 
@@ -142,29 +141,36 @@ def test_fabnetv4_sharednic_ping(fablib):
     for src, dst in site_pairs:
         if src == dst:
             continue  # Skip same-slice tests
-
-        slice_objects[src].post_boot_config()
-        slice_objects[dst].post_boot_config()
-
-        src_node = slice_objects[src].get_node("node1")
-        dst_node = slice_objects[dst].get_node("node1")
-        dst_iface = dst_node.get_interface(network_name="fabnetv4-net1")
-        dst_ip = dst_iface.get_ip_addr()
         pair_key = f"{src}->{dst}"
-
         print(f"Testing {pair_key}...")
 
-        ping_out, _ = src_node.execute(f"ping -c 5 {dst_ip}")
-        if "0% packet loss" in ping_out:
-            pair_result = {"state": True,
-                           "error": ""}
-        else:
-            pair_result = {"state": False,
-                           "error": "Ping Failed"}
-            slices_to_keep.append(src)
-            slices_to_keep.append(dst)
+        try:
+            slice_objects[src].post_boot_config()
+            slice_objects[dst].post_boot_config()
 
-        ping_results[pair_key] = pair_result
+            src_node = slice_objects[src].get_node("node1")
+            dst_node = slice_objects[dst].get_node("node1")
+            dst_iface = dst_node.get_interface(network_name="fabnetv4-net1")
+            dst_ip = dst_iface.get_ip_addr()
+
+            ping_out, _ = src_node.execute(f"ping -c 5 {dst_ip}")
+            if "0% packet loss" in ping_out:
+                pair_result = {"state": True,
+                               "error": ""}
+            else:
+                pair_result = {"state": False,
+                               "error": "Ping Failed"}
+                slices_to_keep.append(src)
+                slices_to_keep.append(dst)
+
+            ping_results[pair_key] = pair_result
+        except Exception as e:
+            print(f"[{pair_key}] FabNetv4 Ping test failed: {e}")
+            traceback.print_exc()
+            ping_results[pair_key] = {
+                "state": False,
+                "error": error_message(slice_obj=slice_obj, exception=e)
+            }
 
     print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices

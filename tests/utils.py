@@ -1,5 +1,6 @@
 import json
 import random
+import traceback
 from itertools import combinations
 
 from fabrictestbed_extensions.fablib.slice import Slice
@@ -53,3 +54,21 @@ def make_site_pairs(sites: list[str]):
         raise ValueError(f"Cannot select {count} unique pairs from only {len(valid_pairs)} valid combinations.")
 
     return random.sample(valid_pairs, count)
+
+
+def wait_and_configure_slice(slice_object: Slice):
+    if not slice_object:
+        return
+    try:
+        slice_object.wait(progress=False)
+        slice_object.wait_ssh(progress=False)
+        slice_object.post_boot_config()
+    except Exception as e:
+        print(f"[{slice_object.get_name()}] Slice configuration error: {e}")
+        traceback.print_exc()
+
+
+def wait_and_configure_slices(slices):
+    for key, slice_obj in slices.items():
+        print(f"Waiting on slice {key}")
+        wait_and_configure_slice(slice_object=slice_obj)

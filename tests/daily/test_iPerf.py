@@ -23,13 +23,12 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 import pytest
-from tests.utils import save_results_json
+from tests.utils import save_results_json, wait_and_configure_slices
 from tests.daily.slice_helper import (
     get_fablib,
     delete_existing_slices,
     get_sites_with_workers,
     create_site_worker_slices,
-    wait_and_configure_slices,
     get_site_pairs,
     collect_node_ips,
     run_remote_command,

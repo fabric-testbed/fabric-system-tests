@@ -124,18 +124,6 @@ def create_site_worker_slices(fablib, sites):
     return slices, failed_slices
 
 
-def wait_and_configure_slices(slices):
-    for name, slice_obj in slices.items():
-        print(f"Waiting on slice {name}")
-        try:
-            slice_obj.wait()
-            slice_obj.wait_ssh()
-            slice_obj.post_boot_config()
-        except Exception as e:
-            print(f"[{name}] Slice configuration error: {e}")
-            traceback.print_exc()
-
-
 def get_site_pairs(slices):
     all_pairs = list(combinations(slices.keys(), 2))
     count = len(slices) // 2  # Automatically use half the number of slices

@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-from tests.utils import error_message, save_results_json
+from tests.utils import error_message, save_results_json, wait_and_configure_slices, wait_and_configure_slice
 from tests.base_test import fabric_rc, fim_lock
 
 VM_CONFIG = {
@@ -113,21 +113,19 @@ def test_non_blocking_vm_creation(fablib):
                 results[site_name] = {"state": False,
                                       "error": error_message(slice_obj=slice_obj, exception=e)}
 
+    wait_and_configure_slices(slice_objects)
+
     # Wait for all slices to complete provisioning
     for site_name, slice_obj in slice_objects.items():
         try:
             print(f"[{site_name}] Waiting for slice provisioning...")
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
-            slice_obj.post_boot_config()
             state = slice_obj.get_state()
             success = state in ["StableOK", "StableError"]
             results[site_name] = {"state": success,
                                   "error": ""}
 
             if not success:
-                print(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
-                continue  # Skip further checks and do not delete this slice
+                raise Exception(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
 
             # Validation checks
             for node in slice_obj.get_nodes():

@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.utils import error_message, save_results_json
+from tests.utils import error_message, save_results_json, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -99,12 +99,10 @@ def test_attached_storage_parallel(fablib):
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
+    wait_and_configure_slices(slice_objects)
+
     for site_name, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
-            slice_obj.post_boot_config()
-
             node = slice_obj.get_node("storage-node")
             storage = node.get_storage(STORAGE_NAME)
             device = storage.get_device_name()

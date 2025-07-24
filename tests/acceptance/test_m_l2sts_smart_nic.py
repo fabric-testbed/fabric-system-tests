@@ -30,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.utils import error_message, save_results_json, make_site_pairs
+from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -123,10 +123,10 @@ def test_l2sts_smartnic_ping(fablib):
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
+    wait_and_configure_slices(slice_objects)
+
     for key, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
 
             node1 = slice_obj.get_node("node1")
