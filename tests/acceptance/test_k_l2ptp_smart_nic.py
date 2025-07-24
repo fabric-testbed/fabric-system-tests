@@ -136,9 +136,6 @@ def test_smartnic_l2ptp_across_sites(fablib):
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
 
-            iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = iface1.get_ip_addr()
-
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
             ip2 = iface2.get_ip_addr()
 
