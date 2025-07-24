@@ -79,8 +79,8 @@ def create_slice(site, worker):
             try:
                 slice_obj.validate()
             except Exception as e:
-                print(f"Validation failed for {site_name}@{worker}: {e}")
-                return f"{site_name}-{worker}", str(e)
+                print(f"Validation failed for {slice_name}: {e}")
+                return f"{slice_name}", str(e)
 
             print(f"Submitting slice {slice_name}")
             slice_obj.submit(wait=False)
@@ -88,7 +88,7 @@ def create_slice(site, worker):
     except Exception as e:
         print(f"Failed to create slice for {site_name}@{worker}: {e}")
         traceback.print_exc()
-        return f"{site_name}-{worker}", str(e)
+        return f"{slice_name}", str(e)
 
 
 def create_site_worker_slices(fablib, sites):
