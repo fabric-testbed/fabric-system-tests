@@ -30,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.utils import error_message, save_results_json
+from tests.utils import error_message, save_results_json, make_site_pairs
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -48,7 +48,7 @@ def fablib():
     return fablib
 
 
-def get_sites_with_workers(fablib):
+def get_sites_with_workers(fablib) -> list[str]:
     """Return sites with >=2 workers and Shared NIC capacity."""
     result = []
     for site in fablib.list_sites(output="list"):
@@ -61,15 +61,6 @@ def get_sites_with_workers(fablib):
             result.append(site["name"])
 
     return result
-
-
-def make_site_pairs(site_names):
-    """
-    Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
-    Each site appears at most once across all pairs.
-    """
-    num_pairs = len(site_names) // 2
-    return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
 
 def create_l2sts_sharednic_slice(site1, site2):
@@ -114,8 +105,8 @@ def test_l2sts_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
 
-    sites_with_workers = get_sites_with_workers(fablib)
-    site_pairs = make_site_pairs(sites_with_workers)
+    site_names = get_sites_with_workers(fablib)
+    site_pairs = make_site_pairs(site_names)
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_triplet = {

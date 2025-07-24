@@ -23,7 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 from itertools import combinations
-
+import random
 import pytest
 import traceback
 import time
@@ -32,7 +32,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-from tests.utils import error_message, save_results_json
+from tests.utils import error_message, save_results_json, make_site_pairs
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -50,7 +50,7 @@ def fablib():
     return fablib
 
 
-def get_sites_with_workers(fablib):
+def get_sites_with_workers(fablib) -> list[str]:
     """Return sites with >=1 NIC and workers."""
     result = []
     for site in fablib.list_sites(output="list"):
@@ -60,26 +60,11 @@ def get_sites_with_workers(fablib):
             continue
         hosts = site.get("hosts", 0)
         if hosts >= 1:
-            workers = []
-            for i in range(1, hosts):
-                workers.append(f"{site['name'].lower()}-w{i}.fabric-testbed.net")
-            result.append((site["name"], sorted(workers)))
+            result.append(site["name"])
     return result
 
 
-def make_site_pairs(sites):
-    """
-    Return unique (site1, site2, worker1, worker2) pairs where each site has at least one worker.
-    Avoids (a, a) and symmetric duplicates (a, b) / (b, a).
-    """
-    pairs = []
-    for (site1, workers1), (site2, workers2) in combinations(sites, 2):
-        if workers1 and workers2:
-            pairs.append((site1, site2, workers1[0], workers2[0]))
-    return pairs
-
-
-def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
+def create_fabnetv4_sharednic_slice(site1, site2):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
         slice_name = f"test-g-324-fabnetv4-{site1.lower()}-{site2.lower()}-{int(time.time())}"
@@ -87,11 +72,11 @@ def create_fabnetv4_sharednic_slice(site1, site2, w1, w2):
 
         slice_obj = fablib.new_slice(name=slice_name)
 
-        node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
+        node1 = slice_obj.add_node(name="node1", site=site1)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
         iface1.set_mode("auto")
 
-        node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
+        node2 = slice_obj.add_node(name="node2", site=site2)
         iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
         iface2.set_mode("auto")
 
@@ -113,14 +98,13 @@ def delete_slice(slice_obj):
 def test_fabnetv4_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
-    available_ips = list(SUBNET)[1:]
 
     site_pairs = make_site_pairs(get_sites_with_workers(fablib))
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_pair = {
-            executor.submit(create_fabnetv4_sharednic_slice, site1, site2, w1, w2): (site1, site2)
-            for site1, site2, w1, w2 in site_pairs
+            executor.submit(create_fabnetv4_sharednic_slice, site1, site2): (site1, site2)
+            for site1, site2 in site_pairs
         }
 
         for future in as_completed(future_to_pair):
