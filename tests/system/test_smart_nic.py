@@ -28,11 +28,11 @@ from tests.base_test import BaseTest
 
 class SmartNicSliceTest(BaseTest):
     def setUp(self):
-        self.prefix = "Nvme"
+        self.prefix = "SmartNIc"
         super(SmartNicSliceTest, self).setUp()
 
     def test_slice(self):
-        site = self._fablib.get_random_site(filter_function=lambda x: x['nvme_available'] > 0)
+        site = self._fablib.get_random_site(filter_function=lambda x: x['nic_connectx_5_available'] > 0)
         print(f"site: {site}")
 
         node_name = 'Node1'
@@ -55,6 +55,15 @@ class SmartNicSliceTest(BaseTest):
 
         # VERIFICATION
         node.execute("sudo dnf install -y pciutils")
-        node.execute("sudo lspci")
+        cmd = "sudo dnf install -y -q pciutils && lspci | grep -i ConnectX"
+        stdout, stderr = node.execute(cmd)
+
+        if "ConnectX-6" not in stdout or "ConnectX-5" not in stdout:
+            raise Exception(f"Smart NIC not detected in lspci")
+
+        # Should see 4 entries: 2 cards × 2 ports
+        nic_count = stdout.count("Ethernet controller: Mellanox Technologies")
+        if nic_count < 2:
+            raise Exception(f"Expected >=2 NIC entries, found {nic_count}")
 
         self._slice.delete()
