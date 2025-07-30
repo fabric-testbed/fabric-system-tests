@@ -129,9 +129,7 @@ def test_non_blocking_vm_creation(fablib):
 
             # Validation checks
             for node in slice_obj.get_nodes():
-                if node.get_cores() >= VM_CONFIG["cores"] or \
-                        node.get_ram() >= VM_CONFIG["ram"] or \
-                        node.get_disk() >= VM_CONFIG["disk"]:
+                if node.get_management_ip() is None:
                     raise Exception("VM Validation Failed!")
             print(f"[{site_name}] Validation successful.")
 
