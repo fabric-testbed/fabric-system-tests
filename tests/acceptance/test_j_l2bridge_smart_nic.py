@@ -48,7 +48,8 @@ def fablib():
 
 
 def get_active_sites(fablib):
-    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
+    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active" and
+            site.get("nic_connectx_5_available") > 0 and site.get("nic_connectx_6_available") > 0]
 
 
 def create_smartnic_bridge_slice(site, nic_type1, nic_type2):

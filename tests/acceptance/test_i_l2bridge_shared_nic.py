@@ -49,7 +49,8 @@ def fablib():
 
 
 def get_active_sites(fablib):
-    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active"]
+    return [site for site in fablib.list_sites(output="list") if site.get("state") == "Active" and
+            "EDC" not in site.get("name")]
 
 
 def create_local_bridge_sharednic_slice(site):
