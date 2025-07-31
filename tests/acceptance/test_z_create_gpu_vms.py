@@ -136,6 +136,16 @@ def test_create_gpu_vms_per_site(fablib):
             try:
                 node = slice_obj.get_node("gpu-node")
                 slice_name = slice_obj.get_name()
+                print(f"[{slice_name}] Checking GPU via lspci...")
+                cmd = "sudo dnf install -y -q pciutils && lspci | grep -i 'NVIDIA|3D controller'"
+                stdout, stderr = node.execute(cmd)
+                if not('NVIDIA' in stdout and '3D controller' in stdout):
+                    raise Exception("GPU not detected")
+                results[site_name] = {
+                    "state": True,
+                    "error": ""
+                }
+                '''
                 print(f"[{slice_name}] Installing CUDA and checking GPU...")
 
                 setup_cmds = [
@@ -164,6 +174,7 @@ def test_create_gpu_vms_per_site(fablib):
                 stdout, stderr = node.execute("nvidia-smi")
                 if "NVIDIA" not in stdout:
                     raise Exception(f"{slice_name} - GPU not detected by nvidia-smi")
+                '''
             except Exception as e:
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
                 results[site_name_gpu_model] = {

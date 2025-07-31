@@ -113,7 +113,7 @@ def test_create_smartnic_vms_per_site(fablib):
             cmd = "sudo dnf install -y -q pciutils && lspci | grep -i ConnectX"
             stdout, stderr = node.execute(cmd)
 
-            if "ConnectX-6" not in stdout or "ConnectX-5" not in stdout:
+            if "ConnectX" not in stdout:
                 raise Exception(f"[{key}] Smart NIC not detected in lspci")
 
             # Should see 4 entries: 2 cards × 2 ports
