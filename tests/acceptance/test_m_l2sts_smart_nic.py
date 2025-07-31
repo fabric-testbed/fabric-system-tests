@@ -120,7 +120,8 @@ def test_l2sts_smartnic_ping(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": error_message(slice_obj=slice_obj, exception=e),
+                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
                 }
 
     wait_and_configure_slices(slice_objects)
@@ -168,7 +169,8 @@ def test_l2sts_smartnic_ping(fablib):
             traceback.print_exc()
             results[key] = {
                 "state": False,
-                "error": error_message(slice_obj=slice_obj, exception=e)
+                "error": error_message(slice_obj=slice_obj, exception=e),
+                "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
             }
 
     print("TEST SUMMARY==========================================================================================")

@@ -128,7 +128,7 @@ def test_fabnetv6_sharednic_ping(fablib):
                 "error": ""
             }
         except Exception as e:
-            print(f"[{site_name}] FABNetv6 ping test failed: {e}")
+            print(f"[{site_name}] FABNetv6 configure failed: {e}")
             traceback.print_exc()
             results[site_name] = {
                 "state": False,
@@ -159,7 +159,10 @@ def test_fabnetv6_sharednic_ping(fablib):
                                "error": ""}
             else:
                 pair_result = {"state": False,
-                               "error": "Ping Failed"}
+                               "error": "Ping Failed",
+                               "src": f"{slice_objects[src].get_name()}/{slice_objects[src].get_slice_id()}",
+                               "dst": f"{slice_objects[dst].get_name()}/{slice_objects[dst].get_slice_id()}",
+                               }
                 slices_to_keep.append(src)
                 slices_to_keep.append(dst)
 
@@ -169,7 +172,9 @@ def test_fabnetv6_sharednic_ping(fablib):
             traceback.print_exc()
             ping_results[pair_key] = {
                 "state": False,
-                "error": error_message(slice_obj=slice_obj, exception=e)
+                "error": error_message(slice_obj=slice_obj, exception=e),
+                "src": f"{slice_objects[src].get_name()}/{slice_objects[src].get_slice_id()}",
+                "dst": f"{slice_objects[dst].get_name()}/{slice_objects[dst].get_slice_id()}",
             }
 
     print("TEST SUMMARY==========================================================================================")
