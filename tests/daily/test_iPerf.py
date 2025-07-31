@@ -88,8 +88,8 @@ def test_site_worker_pair_ping_iperf(fablib):
             pair_result["ping"] = "PASS"
         else:
             pair_result["ping"] = f"FAIL: {ping_err or ping_out.strip().splitlines()[-1]}"
-            pair_result[slices[src].get_slice_name()] = slices[src].get_slice_id()
-            pair_result[slices[dst].get_slice_name()] = slices[dst].get_slice_id()
+            pair_result[slices[src].get_name()] = slices[src].get_slice_id()
+            pair_result[slices[dst].get_name()] = slices[dst].get_slice_id()
             slices_to_keep.append(slices[src].get_slice_id())
             slices_to_keep.append(slices[dst].get_slice_id())
 
