@@ -98,7 +98,7 @@ def test_create_smartnic_vms_per_site(fablib):
             except Exception as e:
                 print(f"[{key}] Slice submission error: {e}")
                 traceback.print_exc()
-                results[site_name] = {
+                results[key] = {
                     "state": False,
                     "error": error_message(slice_obj=slice_obj, exception=e),
                     "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
@@ -121,14 +121,14 @@ def test_create_smartnic_vms_per_site(fablib):
             if nic_count < 2:
                 raise Exception(f"[{key}] Expected >=2 NIC entries, found {nic_count}")
 
-            results[site_name] = {
+            results[key] = {
                 "state": True,
                 "error": ""
             }
         except Exception as e:
             print(f"[{key}] Smart NIC validation error: {e}")
             traceback.print_exc()
-            results[site_name] = {
+            results[key] = {
                 "state": False,
                 "error": error_message(slice_obj=slice_obj, exception=e),
                 "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
@@ -136,14 +136,14 @@ def test_create_smartnic_vms_per_site(fablib):
 
     print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
-    for site_name, slice_obj in slice_objects.items():
-        site_info = results.get(site_name, {})
+    for key, slice_obj in slice_objects.items():
+        site_info = results.get(key, {})
         if site_info.get("state", False):
-            print(f"{site_name}: PASS")
+            print(f"{key}: PASS")
             delete_slice(slice_obj)
         else:
-            print(f"{site_name}: {site_info.get('error')}")
-            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+            print(f"{key}: {site_info.get('error')}")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
 
     save_results_json(results, filename="smart_nic.json")
     print("TEST SUMMARY==========================================================================================")
