@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
 from tests.utils import error_message, save_results_json, wait_and_configure_slices
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _validate_ip
 
 
 NIC_MODEL = 'NIC_Basic'
@@ -126,11 +126,11 @@ def test_sharednic_local_bridge_reachability(fablib):
 
             # Configure Node1
             iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = iface1.get_ip_addr()
+            ip1 = _validate_ip(iface1.get_ip_addr())
 
             # Configure Node2
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            ip2 = iface2.get_ip_addr()
+            ip2 = _validate_ip(iface2.get_ip_addr())
 
             # Test ping
             stdout, stderr = node1.execute(f"ping -c 5 {ip2}")

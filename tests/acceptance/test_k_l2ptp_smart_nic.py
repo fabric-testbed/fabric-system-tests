@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
 from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _validate_ip
 
 
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
@@ -140,7 +140,7 @@ def test_smartnic_l2ptp_across_sites(fablib):
             node2 = slice_obj.get_node("node2")
 
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
-            ip2 = iface2.get_ip_addr()
+            ip2 = _validate_ip(iface2.get_ip_addr())
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
             if "0% packet loss" not in stdout:

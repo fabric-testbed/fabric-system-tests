@@ -23,7 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 
-from tests.base_test import BaseTest
+from tests.base_test import BaseTest, _safe_devname
 
 
 class PersistentStorageSliceTest(BaseTest):
@@ -58,7 +58,7 @@ class PersistentStorageSliceTest(BaseTest):
         #self.assertEqual("", stderr, "Filesystem install on storage failed")
 
         stdout, stderr = node.execute(f"sudo mkdir /mnt/fabric_storage; "
-                                      f"sudo mount {storage.get_device_name()} /mnt/fabric_storage; "
+                                      f"sudo mount {_safe_devname(storage.get_device_name())} /mnt/fabric_storage; "
                                       f"df -h")
         self.assertEqual("", stderr, "Mound failed")
         # VERIFICATION

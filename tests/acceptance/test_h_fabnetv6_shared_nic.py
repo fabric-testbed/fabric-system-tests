@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _validate_ip, _safe_devname
 
 
 NIC_MODEL = 'NIC_Basic'
@@ -151,7 +151,7 @@ def test_fabnetv6_sharednic_ping(fablib):
             src_node = slice_objects[src].get_node("node1")
             dst_node = slice_objects[dst].get_node("node1")
             dst_iface = dst_node.get_interface(network_name="fabnetv6-net1")
-            dst_ip = dst_iface.get_ip_addr()
+            dst_ip = _validate_ip(dst_iface.get_ip_addr())
 
             ping_out, _ = src_node.execute(f"ping6 -c 5 {dst_ip}")
             if "0% packet loss" in ping_out:
