@@ -22,25 +22,25 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-import json
 import os
 import random
 import time
 import traceback
-from itertools import product, combinations
+from itertools import combinations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from fabrictestbed_extensions.fablib.slice import Slice
 
 from tests.base_test import fabric_rc, fim_lock
 
-SLICE_PREFIX = "iperf@"
+SLICE_PREFIX = "iperf"
 DEFAULT_IMAGE = "default_ubuntu_22"
 NIC_MODEL = "NIC_Basic"
 MAX_PARALLEL = 4
 avoid = os.getenv('FABRIC_AVOID')
 if not avoid or len(avoid) == 0:
     avoid = ["EDUKY"]
+
 
 def get_fablib(fabric_rc=fabric_rc):
     return FablibManager(fabric_rc=fabric_rc)
@@ -66,11 +66,11 @@ def create_slice(site, worker):
         with fim_lock:
             fablib = get_fablib()
 
-            slice_name = f"{SLICE_PREFIX}{site_name.lower()}-w{worker}-{int(time.time())}"
+            slice_name = f"{SLICE_PREFIX}-{worker}-{int(time.time())}"
             slice_obj = fablib.new_slice(name=slice_name)
             node = slice_obj.add_node(name="node", site=site_name, cores=4, ram=16, disk=100,
                                       image="docker_rocky_8",
-                                      host=f"{site_name.lower()}-w{worker}.fabric-testbed.net")
+                                      host=worker)
             node.add_fabnet(net_type="IPv4", nic_type='NIC_Basic')
             node.add_post_boot_upload_directory('../scripts/node_tools', '.')
             node.add_post_boot_execute('sudo node_tools/host_tune.sh')
@@ -79,8 +79,8 @@ def create_slice(site, worker):
             try:
                 slice_obj.validate()
             except Exception as e:
-                print(f"Validation failed for {site_name}@{worker}: {e}")
-                return f"{site_name}-{worker}", str(e)
+                print(f"Validation failed for {slice_name}: {e}")
+                return f"{slice_name}", str(e)
 
             print(f"Submitting slice {slice_name}")
             slice_obj.submit(wait=False)
@@ -88,7 +88,7 @@ def create_slice(site, worker):
     except Exception as e:
         print(f"Failed to create slice for {site_name}@{worker}: {e}")
         traceback.print_exc()
-        return f"{site_name}-{worker}", str(e)
+        return f"{slice_name}", str(e)
 
 
 def create_site_worker_slices(fablib, sites):
@@ -96,12 +96,21 @@ def create_site_worker_slices(fablib, sites):
     failed_slices = {}
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
-        futures = {
-            executor.submit(create_slice, site, worker): (site, worker)
-            for site in sites
-            if site["name"] not in avoid
-            for worker in range(1, site["hosts"] + 1)
-        }
+        futures = {}
+        for site in sites:
+            if site.get("name") == "EDUKY":
+                continue
+            if site.get("state") != "Active":
+                continue
+            if site.get("state") in avoid:
+                continue
+            site_obj = fablib.get_resources().get_site(site["name"])
+            for h in site_obj.get_hosts().values():
+                if h.get_state() != "Active":
+                    continue
+                f = executor.submit(create_slice, site, h.get_name())
+                futures[f] = (site, h)
+
         for future in as_completed(futures):
             site_worker = futures[future]
             try:
@@ -113,18 +122,6 @@ def create_site_worker_slices(fablib, sites):
             except Exception as e:
                 print(f"Exception for {site_worker}: {e}")
     return slices, failed_slices
-
-
-def wait_and_configure_slices(slices):
-    for name, slice_obj in slices.items():
-        print(f"Waiting on slice {name}")
-        try:
-            slice_obj.wait()
-            slice_obj.wait_ssh()
-            slice_obj.post_boot_config()
-        except Exception as e:
-            print(f"[{name}] Slice configuration error: {e}")
-            traceback.print_exc()
 
 
 def get_site_pairs(slices):
@@ -154,15 +151,13 @@ def run_remote_command(node, cmd):
         return "", str(e)
 
 
-def cleanup_slices(slices):
+def cleanup_slices(slices, slices_to_keep):
     for name, slice_obj in slices.items():
         try:
+            if slice_obj.get_slice_id() in slices_to_keep:
+                continue
             print(f"Deleting slice {name}")
             slice_obj.delete()
         except Exception as e:
             print(f"Error deleting slice {name}: {e}")
 
-
-def save_results_json(results, filename="iperf_test_results.json"):
-    with open(filename, "w") as f:
-        json.dump(results, f, indent=2)

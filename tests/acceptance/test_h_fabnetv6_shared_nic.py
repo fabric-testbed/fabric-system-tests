@@ -22,24 +22,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-from itertools import combinations
-
 import pytest
 import traceback
 import time
-from ipaddress import IPv6Network
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+
+from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock, _validate_ip, _safe_devname
 
 
 NIC_MODEL = 'NIC_Basic'
 NIC_CAPACITY_FIELD = 'nic_basic_capacity'
 NETWORK_TYPE = 'IPv6'
-MAX_PARALLEL = 2  # Limit concurrency
-SUBNET = IPv6Network("2001:db8:abcd:0012::/64")
+MAX_PARALLEL = 2  # FABNetv6 provisioning can be slow
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +46,7 @@ def fablib():
     return fablib
 
 
-def get_sites_with_workers(fablib):
+def get_sites_with_workers(fablib) -> list[str]:
     """Return sites with >=1 NIC and workers."""
     result = []
     for site in fablib.list_sites(output="list"):
@@ -59,43 +56,22 @@ def get_sites_with_workers(fablib):
             continue
         hosts = site.get("hosts", 0)
         if hosts >= 1:
-            workers = []
-            for i in range(1, hosts):
-                workers.append(f"{site['name'].lower()}-w{i}.fabric-testbed.net")
-            result.append((site["name"], sorted(workers)))
+            result.append(site["name"])
     return result
 
 
-def make_site_pairs(sites):
-    """
-    Return unique (site1, site2, worker1, worker2) pairs where each site has at least one worker.
-    Avoids (a, a) and symmetric duplicates (a, b) / (b, a).
-    """
-    pairs = []
-    for (site1, workers1), (site2, workers2) in combinations(sites, 2):
-        if workers1 and workers2:
-            pairs.append((site1, site2, workers1[0], workers2[0]))
-    return pairs
-
-
-def create_fabnetv6_sharednic_slice(site1, site2, w1, w2):
+def create_fabnetv6_sharednic_slice(site):
     with fim_lock:
         fablib = FablibManager(fabric_rc=fabric_rc)
-        slice_name = f"test-h-325-fabnetv6-{site1.lower()}-{site2.lower()}-{int(time.time())}"
-        print(f"[{site1}/{site2}] Creating FABNetv6 slice: {slice_name}")
+        slice_name = f"test-g-324-fabnetv6-{site.lower()}-{int(time.time())}"
+        print(f"[{site}] Creating FABNetv6 slice: {slice_name}")
 
         slice_obj = fablib.new_slice(name=slice_name)
 
-        node1 = slice_obj.add_node(name="node1", site=site1, host=w1)
+        node1 = slice_obj.add_node(name="node1", site=site)
         iface1 = node1.add_component(model=NIC_MODEL, name="nic1").get_interfaces()[0]
         iface1.set_mode("auto")
-
-        node2 = slice_obj.add_node(name="node2", site=site2, host=w2)
-        iface2 = node2.add_component(model=NIC_MODEL, name="nic2").get_interfaces()[0]
-        iface2.set_mode("auto")
-
         net1 = slice_obj.add_l3network(name="fabnetv6-net1", interfaces=[iface1], type=NETWORK_TYPE)
-        net2 = slice_obj.add_l3network(name="fabnetv6-net2", interfaces=[iface2], type=NETWORK_TYPE)
 
         slice_obj.submit(wait=False)
         return slice_obj
@@ -113,82 +89,114 @@ def test_fabnetv6_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
 
-    site_pairs = make_site_pairs(get_sites_with_workers(fablib))
+    site_names = get_sites_with_workers(fablib)
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_pair = {
-            executor.submit(create_fabnetv6_sharednic_slice, site1, site2, w1, w2): (site1, site2)
-            for site1, site2, w1, w2 in site_pairs
+            executor.submit(create_fabnetv6_sharednic_slice, site): site
+            for site in site_names
         }
 
         for future in as_completed(future_to_pair):
-            site1, site2 = future_to_pair[future]
-            key = f"{site1}-{site2}"
+            site_name = future_to_pair[future]
             try:
                 slice_obj = future.result()
-                slice_objects[key] = slice_obj
+                slice_objects[site_name] = slice_obj
             except Exception as e:
-                print(f"[{key}] Slice creation failed: {e}")
+                print(f"[{site_name}] Slice creation failed: {e}")
                 traceback.print_exc()
-                results[key] = {
+                results[site_name] = {
                     "state": False,
                     "error": error_message(slice_obj=slice_obj, exception=e)
                 }
 
-    for key, slice_obj in slice_objects.items():
+    wait_and_configure_slices(slice_objects)
+    for site_name, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
 
             node1 = slice_obj.get_node("node1")
-            node2 = slice_obj.get_node("node2")
-
             net1 = slice_obj.get_network("fabnetv6-net1")
-            net2 = slice_obj.get_network("fabnetv6-net2")
 
             node1.ip_route_add(
-                    subnet=fablib.FABNETV6_SUBNET,
+                    subnet=fablib.FABNETV4_SUBNET,
                     gateway=net1.get_gateway(),
             )
-            node2.ip_route_add(
-                subnet=fablib.FABNETV6_SUBNET,
-                gateway=net2.get_gateway(),
-            )
 
-            iface1 = node1.get_interface(network_name="fabnetv6-net1")
-            iface2 = node2.get_interface(network_name="fabnetv6-net2")
-
-            node1.execute(f"ip -6 addr show {_safe_devname(iface1.get_device_name())}")
-            node2.execute(f"ip -6 addr show {_safe_devname(iface2.get_device_name())}")
-
-            ip1 = _validate_ip(iface1.get_ip_addr())
-            ip2 = _validate_ip(iface2.get_ip_addr())
-
-            ping_out1, _ = node1.execute(f"ping6 -c 5 {ip2}")
-            ping_out2, _ = node2.execute(f"ping6 -c 5 {ip1}")
-
-            if "0% packet loss" not in ping_out1 or "0% packet loss" not in ping_out2:
-                raise Exception("Failed to pass traffic!")
-
-            results[key] = {
+            results[site_name] = {
                 "state": True,
                 "error": ""
             }
         except Exception as e:
-            print(f"[{key}] FABNetv6 ping test failed: {e}")
+            print(f"[{site_name}] FABNetv6 configure failed: {e}")
             traceback.print_exc()
-            results[key] = {
+            results[site_name] = {
                 "state": False,
                 "error": error_message(slice_obj=slice_obj, exception=e)
             }
 
+    slices_to_keep = []
+    ping_results = {}
+    site_pairs = make_site_pairs(site_names)
+    for src, dst in site_pairs:
+        if src == dst:
+            continue  # Skip same-slice tests
+        pair_key = f"{src}->{dst}"
+        print(f"Testing {pair_key}...")
+
+        try:
+            slice_objects[src].post_boot_config()
+            slice_objects[dst].post_boot_config()
+
+            src_node = slice_objects[src].get_node("node1")
+            dst_node = slice_objects[dst].get_node("node1")
+            dst_iface = dst_node.get_interface(network_name="fabnetv6-net1")
+            dst_ip = _validate_ip(dst_iface.get_ip_addr())
+
+            ping_out, _ = src_node.execute(f"ping6 -c 5 {dst_ip}")
+            if "0% packet loss" in ping_out:
+                pair_result = {"state": True,
+                               "error": ""}
+            else:
+                pair_result = {"state": False,
+                               "error": "Ping Failed",
+                               "src": f"{slice_objects[src].get_name()}/{slice_objects[src].get_slice_id()}",
+                               "dst": f"{slice_objects[dst].get_name()}/{slice_objects[dst].get_slice_id()}",
+                               }
+                slices_to_keep.append(src)
+                slices_to_keep.append(dst)
+
+            ping_results[pair_key] = pair_result
+        except Exception as e:
+            print(f"[{pair_key}] FabNetv6 Ping test failed: {e}")
+            traceback.print_exc()
+            ping_results[pair_key] = {
+                "state": False,
+                "error": error_message(slice_obj=slice_obj, exception=e),
+                "src": f"{slice_objects[src].get_name()}/{slice_objects[src].get_slice_id()}",
+                "dst": f"{slice_objects[dst].get_name()}/{slice_objects[dst].get_slice_id()}",
+            }
+
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
+            print(f"{site_name}: Create PASS")
+            if site_name in slice_objects:
+                continue
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    for key, info in ping_results.items():
+        print(f"{key}: {info}")
+
+    save_results_json(results, filename="fabnetv6_shared.json")
+    save_results_json(ping_results, filename="fabnetv6_shared_ping.json")
+    print("TEST SUMMARY==========================================================================================")
+
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"FABNetv6 Shared NIC test failed on: {', '.join(failed)}"

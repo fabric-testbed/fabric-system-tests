@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock
 
 
@@ -95,35 +95,43 @@ def test_create_nvme_vms_per_site(fablib):
                 print(f"[{site_name}] Slice submission error: {e}")
                 traceback.print_exc()
                 results[site_name] = {"state": False,
-                                      "error": error_message(slice_obj=slice_obj, exception=e)}
+                                      "error": error_message(slice_obj=slice_obj, exception=e),
+                                      "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"}
 
+    wait_and_configure_slices(slice_objects)
     for site_name, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
-            slice_obj.post_boot_config()
             node = slice_obj.get_node("nvme-node")
 
             # Confirm NVMe devices are visible
             print(f"[{site_name}] Checking NVMe devices via lspci...")
             cmd = "sudo dnf install -y -q pciutils && lspci | grep -i nvme"
             stdout, stderr = node.execute(cmd)
-            assert 'Non-Volatile memory controller' in stdout, f"[{site_name}] NVMe not detected"
-
+            if 'Non-Volatile memory controller' not in stdout:
+                raise Exception("NVME not detected")
             results[site_name] = {"state": True,
                                   "error": ""}
         except Exception as e:
             print(f"[{site_name}] NVMe validation error: {e}")
             traceback.print_exc()
             results[site_name] = {"state": False,
-                                  "error": error_message(slice_obj=slice_obj, exception=e)}
+                                  "error": error_message(slice_obj=slice_obj, exception=e),
+                                  "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"}
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
+            print(f"{site_name}: PASS")
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
+    save_results_json(results, filename="nvme.json")
+    print("TEST SUMMARY==========================================================================================")
+
     failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"NVMe attachment failed on: {', '.join(failed)}"

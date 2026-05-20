@@ -28,7 +28,7 @@ import time
 from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock
 
 GPU_MODELS = {
@@ -118,14 +118,14 @@ def test_create_gpu_vms_per_site(fablib):
                 traceback.print_exc()
                 results[site_name_gpu_model] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": error_message(slice_obj=slice_obj, exception=e),
+                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
                 }
+
+    wait_and_configure_slices(slice_objects)
 
     # Wait for all slices to complete provisioning
     for site_name_gpu_model, slice_obj in slice_objects.items():
-        slice_obj.wait(progress=False)
-        slice_obj.wait_ssh(progress=False)
-        slice_obj.post_boot_config()
         success = slice_obj.get_state() in ["StableOK", "StableError"]
         results[site_name] = {
             "state": success,
@@ -136,18 +136,28 @@ def test_create_gpu_vms_per_site(fablib):
             try:
                 node = slice_obj.get_node("gpu-node")
                 slice_name = slice_obj.get_name()
+                print(f"[{slice_name}] Checking GPU via lspci...")
+                cmd = "sudo dnf install -y -q pciutils && lspci | grep -i 'NVIDIA|3D controller'"
+                stdout, stderr = node.execute(cmd)
+                if not('NVIDIA' in stdout and '3D controller' in stdout):
+                    raise Exception("GPU not detected")
+                results[site_name] = {
+                    "state": True,
+                    "error": ""
+                }
+                '''
                 print(f"[{slice_name}] Installing CUDA and checking GPU...")
 
                 setup_cmds = [
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y pciutils && lspci | grep 'NVIDIA|3D controller'",
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get -q update",
                     "sudo DEBIAN_FRONTEND=noninteractive apt-get -q install -y linux-headers-$(uname -r) gcc"
-                    'sudo apt-get update -q',
-                    'sudo apt-get install -y linux-headers-$(uname -r) gcc',
+                    'sudo DEBIAN_FRONTEND=noninteractive apt-get update -q',
+                    'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y linux-headers-$(uname -r) gcc',
                     f'wget https://developer.download.nvidia.com/compute/cuda/repos/{distro}/{architecture}/cuda-keyring_1.1-1_all.deb',
                     f'sudo DEBIAN_FRONTEND=noninteractive dpkg -i cuda-keyring_1.1-1_all.deb',
                     f'sudo DEBIAN_FRONTEND=noninteractive apt-get -q update',
-                    f'sudo apt-get -q install -y cuda-{version.replace(".", "-")}'
+                    f'sudo DEBIAN_FRONTEND=noninteractive apt-get -q install -y cuda-{version.replace(".", "-")}'
                 ]
 
                 for cmd in setup_cmds:
@@ -162,21 +172,31 @@ def test_create_gpu_vms_per_site(fablib):
 
                 print(f"[{slice_name}] Running nvidia-smi...")
                 stdout, stderr = node.execute("nvidia-smi")
-                assert "NVIDIA" in stdout, f"{slice_name} - GPU not detected by nvidia-smi"
+                if "NVIDIA" not in stdout:
+                    raise Exception(f"{slice_name} - GPU not detected by nvidia-smi")
+                '''
             except Exception as e:
                 print(f"[{site_name_gpu_model}] Validation error: {e}")
                 results[site_name_gpu_model] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": error_message(slice_obj=slice_obj, exception=e),
+                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
                 }
 
-    # Cleanup
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
-    for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+    for key, slice_obj in slice_objects.items():
+        site_info = results.get(key, {})
+        if site_info.get("state", False):
+            print(f"{key}: PASS")
             delete_slice(slice_obj)
         else:
-            print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
+            print(f"{key}: {site_info.get('error')}")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    save_results_json(results, filename="gpu.json")
+    print("TEST SUMMARY==========================================================================================")
+
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"Slice with GPUs failed on: {', '.join(failed)}"

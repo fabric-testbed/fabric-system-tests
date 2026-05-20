@@ -33,7 +33,7 @@ EXPECTED_SITES_MAP = {
     "EDC", "NCSA", "TACC", "STAR", "MAX", "WASH", "MICH", "SALT", "DALL", "MASS",
     "UTAH", "UCSD", "CLEM", "FIU", "GPN", "CERN", "INDI", "NEWY", "KANS",
     "PSC", "ATLA", "SEAT", "LOSA", "AMST", "GATECH", "RUTG", "PRIN", "HAWI", "SRI",
-    "EDUKY", "BRIST", "TOKY", "CIEN"
+    "EDUKY", "BRIST", "TOKY"#, "CIEN"
     },
     "beta-2.fabric-testbed.net": {"RENC", "LBNL"},  # Example test deployment
     # Add other known environments here

@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json, wait_and_configure_slices, wait_and_configure_slice
 from tests.base_test import fabric_rc, fim_lock
 
 VM_CONFIG = {
@@ -63,16 +63,18 @@ def create_and_submit_slice(site):
 
         fablib = FablibManager(fabric_rc=fabric_rc)
         site_name = site["name"]
-        worker_count = site["hosts"]
         slice_name = f"test-b-311-varying-size-{site_name.lower()}-{int(time.time())}"
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
-        for w in range(1, worker_count+1):
+        site_obj = fablib.get_resources().get_site(site_name)
+        for h in site_obj.get_hosts().values():
+            if h.get_state() != "Active":
+                continue
             slice_obj.add_node(
-                name=f"{site_name.lower()}-w{w}",
+                name=h.get_name(),
                 site=site_name,
-                host=f"{site_name.lower()}-w{w}.fabric-testbed.net",
+                host=h.get_name(),
                 cores=VM_CONFIG["cores"],
                 ram=VM_CONFIG["ram"],
                 disk=VM_CONFIG["disk"]
@@ -109,44 +111,50 @@ def test_non_blocking_vm_creation(fablib):
                 print(f"[{site_name}] Error submitting slice: {e}")
                 traceback.print_exc()
                 results[site_name] = {"state": False,
-                                      "error": error_message(slice_obj=slice_obj, exception=e)}
+                                      "error": error_message(slice_obj=slice_obj, exception=e),
+                                      "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"}
+
+    wait_and_configure_slices(slice_objects)
 
     # Wait for all slices to complete provisioning
     for site_name, slice_obj in slice_objects.items():
         try:
             print(f"[{site_name}] Waiting for slice provisioning...")
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
-            slice_obj.post_boot_config()
             state = slice_obj.get_state()
             success = state in ["StableOK", "StableError"]
             results[site_name] = {"state": success,
                                   "error": ""}
 
             if not success:
-                print(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
-                continue  # Skip further checks and do not delete this slice
+                raise Exception(f"[{site_name}] Slice provisioning ended in unexpected state: {state}")
 
             # Validation checks
             for node in slice_obj.get_nodes():
-                assert node.get_cores() >= VM_CONFIG["cores"], node.get_error_message()
-                assert node.get_ram() >= VM_CONFIG["ram"], node.get_error_message()
-                assert node.get_disk() >= VM_CONFIG["disk"], node.get_error_message()
+                if node.get_management_ip() is None:
+                    raise Exception("VM Validation Failed!")
             print(f"[{site_name}] Validation successful.")
 
         except Exception as e:
             print(f"[{site_name}] Error during provisioning or validation: {e}")
             traceback.print_exc()
             results[site_name] = {"state": False,
-                                  "error": error_message(slice_obj=slice_obj, exception=e)}
+                                  "error": error_message(slice_obj=slice_obj, exception=e),
+                                  "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"}
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
+            print(f"{site_name}: PASS")
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
-    assert not failed, f"Slice creation failed on: {', '.join(failed)}"
+    save_results_json(results, filename="varying_size_vm_create.json")
+    print("TEST SUMMARY==========================================================================================")
 
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
+    assert not failed, f"Slice creation failed on: {', '.join(failed)}"

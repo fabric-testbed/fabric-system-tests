@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-from itertools import combinations
 
 import pytest
 import traceback
@@ -31,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock, _validate_ip, _safe_devname
 
 
@@ -49,7 +48,7 @@ def fablib():
     return fablib
 
 
-def get_sites_with_workers(fablib):
+def get_sites_with_workers(fablib) -> list[str]:
     """Return sites with >=2 workers and Shared NIC capacity."""
     result = []
     for site in fablib.list_sites(output="list"):
@@ -62,15 +61,6 @@ def get_sites_with_workers(fablib):
             result.append(site["name"])
 
     return result
-
-
-def make_site_pairs(site_names):
-    """
-    Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
-    Each site appears at most once across all pairs.
-    """
-    num_pairs = len(site_names) // 2
-    return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
 
 def create_l2sts_sharednic_slice(site1, site2):
@@ -115,13 +105,14 @@ def test_l2sts_sharednic_ping(fablib):
     results = {}
     slice_objects = {}
 
-    sites_with_workers = get_sites_with_workers(fablib)
-    site_pairs = make_site_pairs(sites_with_workers)
+    site_names = get_sites_with_workers(fablib)
+    site_pairs = make_site_pairs(site_names)
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as executor:
         future_to_triplet = {
             executor.submit(create_l2sts_sharednic_slice, site1, site2): (site1, site2)
             for site1, site2 in site_pairs
+            if site1 != site2
         }
 
         for future in as_completed(future_to_triplet):
@@ -135,13 +126,14 @@ def test_l2sts_sharednic_ping(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": error_message(slice_obj=slice_obj, exception=e),
+                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
                 }
+
+    wait_and_configure_slices(slice_objects)
 
     for key, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
 
             node1 = slice_obj.get_node("node1")
@@ -161,11 +153,14 @@ def test_l2sts_sharednic_ping(fablib):
             node3.execute(f"ip addr show {_safe_devname(iface3.get_device_name())}")
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
             stdout, _ = node1.execute(f"ping -c 5 {ip3}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
             stdout, _ = node2.execute(f"ping -c 5 {ip3}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
 
             results[key] = {
                 "state": True,
@@ -176,7 +171,8 @@ def test_l2sts_sharednic_ping(fablib):
             traceback.print_exc()
             results[key] = {
                 "state": False,
-                "error": error_message(slice_obj=slice_obj, exception=e)
+                "error": error_message(slice_obj=slice_obj, exception=e),
+                "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
             }
 
     # Cleanup only successful slices
@@ -186,5 +182,20 @@ def test_l2sts_sharednic_ping(fablib):
         else:
             print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    print("TEST SUMMARY==========================================================================================")
+    # Cleanup only successful slices
+    for key, slice_obj in slice_objects.items():
+        site_info = results.get(key, {})
+        if site_info.get("state", False):
+            print(f"{key}: PASS")
+            delete_slice(slice_obj)
+        else:
+            print(f"{key}: {site_info.get('error')}")
+            print(f"[{key}] Skipping deletion because slice failed. Please inspect manually.")
+
+    save_results_json(results, filename="l2sts_shared.json")
+    print("TEST SUMMARY==========================================================================================")
+
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"L2STS Shared NIC test failed on: {', '.join(failed)}"

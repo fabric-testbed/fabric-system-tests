@@ -22,7 +22,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
-from itertools import combinations
 
 import pytest
 import traceback
@@ -31,7 +30,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
 
-from tests.acceptance.utils import error_message
+from tests.utils import error_message, save_results_json, make_site_pairs, wait_and_configure_slices
 from tests.base_test import fabric_rc, fim_lock, _validate_ip
 
 
@@ -57,16 +56,6 @@ def get_smartnic_sites(fablib, nic_capacity_field):
         site for site in fablib.list_sites(output="list")
         if site.get("state") == "Active" and site.get(nic_capacity_field, 0) >= 1
     ]
-
-
-def make_site_pairs(site_list):
-    """
-    Return unique non-overlapping (site1_name, site2_name) pairs from site_list.
-    Each site appears at most once across all pairs.
-    """
-    site_names = [site["name"] for site in site_list]
-    num_pairs = len(site_names) // 2
-    return [(site_names[i], site_names[i + 1]) for i in range(0, 2 * num_pairs, 2)]
 
 
 def create_l2ptp_slice(site1, site2, nic_model):
@@ -113,8 +102,11 @@ def test_smartnic_l2ptp_across_sites(fablib):
         if len(sites) < 2:
             print(f"Skipping {nic_model}: Not enough sites with {capacity_field}")
             continue
-        site_pairs = make_site_pairs(sites)
+        site_names = [site["name"] for site in sites]
+        site_pairs = make_site_pairs(site_names)
         for site1, site2 in site_pairs:
+            if site1 == site2:
+                continue
             test_tasks.append((site1, site2, nic_model))
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_TESTS) as executor:
@@ -134,26 +126,26 @@ def test_smartnic_l2ptp_across_sites(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": error_message(slice_obj=slice_obj, exception=e),
+                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
                 }
+
+    wait_and_configure_slices(slice_objects)
 
     for key, slice_obj in slice_objects.items():
         try:
-            slice_obj.wait(progress=False)
-            slice_obj.wait_ssh(progress=False)
             slice_obj.post_boot_config()
 
             node1 = slice_obj.get_node("node1")
             node2 = slice_obj.get_node("node2")
 
-            iface1 = node1.get_interface(network_name=NETWORK_NAME)
-            ip1 = _validate_ip(iface1.get_ip_addr())
-
             iface2 = node2.get_interface(network_name=NETWORK_NAME)
             ip2 = _validate_ip(iface2.get_ip_addr())
 
             stdout, _ = node1.execute(f"ping -c 5 {ip2}")
-            assert "0% packet loss" in stdout, f"[{key}] Ping failed"
+            if "0% packet loss" not in stdout:
+                raise Exception(f"[{key}] Ping failed")
+
             results[key] = {
                 "state": True,
                 "error": ""
@@ -164,15 +156,24 @@ def test_smartnic_l2ptp_across_sites(fablib):
             traceback.print_exc()
             results[key] = {
                 "state": False,
-                "error": error_message(slice_obj=slice_obj, exception=e)
+                "error": error_message(slice_obj=slice_obj, exception=e),
+                "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
             }
 
+    print("TEST SUMMARY==========================================================================================")
     # Cleanup only successful slices
     for site_name, slice_obj in slice_objects.items():
-        if results.get(site_name, {}).get("state", False):
+        site_info = results.get(site_name, {})
+        if site_info.get("state", False):
+            print(f"{site_name}: PASS")
             delete_slice(slice_obj)
         else:
+            print(f"{site_name}: {site_info.get('error')}")
             print(f"[{site_name}] Skipping deletion because slice failed. Please inspect manually.")
 
-    failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    save_results_json(results, filename="l2ptp_smart_nic.json")
+    print("TEST SUMMARY==========================================================================================")
+
+    #failed = [f"{site}: {info['error']}" for site, info in results.items() if not info["state"]]
+    failed = [site for site, info in results.items() if not info["state"]]
     assert not failed, f"L2PTP SmartNIC tests failed on: {', '.join(failed)}"
