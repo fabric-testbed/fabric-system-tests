@@ -22,8 +22,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+import shlex
 from datetime import datetime
-from tests.base_test import BaseTest
+from tests.base_test import BaseTest, _validate_ip, _safe_devname
 
 
 class FabNetv4ExtRenewSliceTest(BaseTest):
@@ -98,10 +99,10 @@ class FabNetv4ExtRenewSliceTest(BaseTest):
         node1_iface.ip_addr_add(addr=node1_addr, subnet=network1.get_subnet())
 
         # Add route to external network Google DNS server in this case
-        stdout, stderr = node1.execute(f'sudo ip route add 8.8.8.0/24 via {network1.get_gateway()}')
+        stdout, stderr = node1.execute(f'sudo ip route add 8.8.8.0/24 via {_validate_ip(network1.get_gateway())}')
         self.assertEqual("", stderr)
 
-        stdout, stderr = node1.execute(f'ip addr show {node1_iface.get_device_name()}')
+        stdout, stderr = node1.execute(f'ip addr show {_safe_devname(node1_iface.get_device_name())}')
         self.assertEqual("", stderr)
 
         stdout, stderr = node1.execute(f'ip route list')
@@ -114,10 +115,10 @@ class FabNetv4ExtRenewSliceTest(BaseTest):
         node2_iface.ip_addr_add(addr=node2_addr, subnet=network2.get_subnet())
 
         # Add route to external network Google DNS server in this case
-        stdout, stderr = node2.execute(f'sudo ip route add 8.8.8.0/24 via {network2.get_gateway()}')
+        stdout, stderr = node2.execute(f'sudo ip route add 8.8.8.0/24 via {_validate_ip(network2.get_gateway())}')
         self.assertEqual("", stderr)
 
-        stdout, stderr = node2.execute(f'ip addr show {node2_iface.get_device_name()}')
+        stdout, stderr = node2.execute(f'ip addr show {_safe_devname(node2_iface.get_device_name())}')
         self.assertEqual("", stderr)
 
         stdout, stderr = node2.execute(f'ip route list')
@@ -126,13 +127,13 @@ class FabNetv4ExtRenewSliceTest(BaseTest):
         # VERIFICATION
         # Ping Google's DNS server from Node1 via the FabNetv4Ext network
         stdout, stderr = node1.execute(
-            f"sudo ping -c 5 8.8.8.8 -I {node1.get_interface(network_name=network1_name).get_device_name()}")
+            f"sudo ping -c 5 8.8.8.8 -I {_safe_devname(node1.get_interface(network_name=network1_name).get_device_name())}")
         self.assertTrue("5 packets transmitted, 5 received" in stdout)
         self.assertEqual("", stderr)
 
         # Ping Google's DNS server from Node2 via the FabNetv4Ext network
         stdout, stderr = node2.execute(
-            f"sudo ping -c 5 8.8.8.8 -I {node2.get_interface(network_name=network2_name).get_device_name()}")
+            f"sudo ping -c 5 8.8.8.8 -I {_safe_devname(node2.get_interface(network_name=network2_name).get_device_name())}")
         print(stdout)
         print(stderr)
         self.assertTrue("5 packets transmitted, 5 received" in stdout)

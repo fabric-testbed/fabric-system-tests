@@ -23,8 +23,6 @@
 # SOFTWARE.
 from ipaddress import IPv4Network
 
-from fabrictestbed_extensions.fablib.fablib import fablib
-
 from tests.base_test import BaseTest
 
 
@@ -34,7 +32,7 @@ class MflibSliceTest(BaseTest):
         super(MflibSliceTest, self).setUp()
 
     def test_slice(self):
-        [site1] = fablib.get_random_sites(count=1)
+        [site1] = self._fablib.get_random_sites(count=1)
         print(f"Sites: {site1}")
 
         node1_name = 'Node1'

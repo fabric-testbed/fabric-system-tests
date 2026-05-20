@@ -29,7 +29,7 @@ from fabrictestbed_extensions.fablib.fablib import FablibManager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from tests.acceptance.utils import error_message
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _safe_devname
 
 
 VM_CONFIG = {"cores": 10, "ram": 20, "disk": 50}
@@ -107,7 +107,7 @@ def test_attached_storage_parallel(fablib):
 
             node = slice_obj.get_node("storage-node")
             storage = node.get_storage(STORAGE_NAME)
-            device = storage.get_device_name()
+            device = _safe_devname(storage.get_device_name())
             print(f"[{site_name}] Storage device: {device}")
 
             # Format volume

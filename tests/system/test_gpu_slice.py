@@ -22,6 +22,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
+import re
 from tests.base_test import BaseTest
 
 
@@ -70,6 +71,9 @@ class GpuSliceTest(BaseTest):
         distro = 'ubuntu2204'
         version = '12.6'
         architecture = 'x86_64'
+
+        if not re.match(r'^\d+\.\d+$', version):
+            raise ValueError(f"Invalid CUDA version string: {version!r}")
 
         # install prerequisites
         commands = [

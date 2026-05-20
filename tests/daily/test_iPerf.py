@@ -23,6 +23,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 import pytest
+from tests.base_test import _validate_ip
 from tests.daily.slice_helper import (
     get_fablib,
     delete_existing_slices,
@@ -74,7 +75,7 @@ def test_site_worker_pair_ping_iperf(fablib):
 
         src_node = slices[src].get_node("node")
         dst_node = slices[dst].get_node("node")
-        dst_ip = ip_map[dst]
+        dst_ip = _validate_ip(ip_map[dst])
         pair_key = f"{src}->{dst}"
 
         print(f"Testing {pair_key}...")
