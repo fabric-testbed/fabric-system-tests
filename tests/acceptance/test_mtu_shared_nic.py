@@ -27,7 +27,7 @@ import re
 import time
 import shlex
 from fabrictestbed_extensions.fablib.fablib import FablibManager
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _validate_ip
 
 
 SLICE_PREFIX = 'mtu@'
@@ -97,8 +97,8 @@ def test_mtu_probe(fablib):
 
         for site, slice_obj in slices.items():
             node = slice_obj.get_node('node')
-            ipv4 = str(slice_obj.get_l3network('net4').get_available_ips()[0])
-            ipv6 = str(slice_obj.get_l3network('net6').get_available_ips()[0])
+            ipv4 = _validate_ip(slice_obj.get_l3network('net4').get_available_ips()[0])
+            ipv6 = _validate_ip(slice_obj.get_l3network('net6').get_available_ips()[0])
             addrs[site] = {4: ipv4, 6: ipv6}
             print(f"[{site}] IPv4: {ipv4} | IPv6: {ipv6}")
 
@@ -109,7 +109,7 @@ def test_mtu_probe(fablib):
             cmds = []
             for af in [4, 6]:
                 intf = node.get_interface(network_name=f'net{af}')
-                devname = intf.get_os_interface()
+                devname = intf.get_device_name()
                 addr = addrs[site][af]
                 net = intf.get_network()
                 cmds += [
@@ -120,7 +120,7 @@ def test_mtu_probe(fablib):
                 ]
                 for dst_site in slices:
                     if dst_site != site:
-                        cmds.append(f"sudo ip -{af} route replace {addrs[dst_site][af]} via {net.get_gateway()}")
+                        cmds.append(f"sudo ip -{af} route replace {addrs[dst_site][af]} via {_validate_ip(net.get_gateway())}")
             stdout, stderr = node.execute('\n'.join(cmds))
             if stderr:
                 print(f"[{site}] Interface config errors:\n{stderr}")

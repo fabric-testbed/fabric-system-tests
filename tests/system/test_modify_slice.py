@@ -25,8 +25,6 @@
 
 from ipaddress import IPv4Network
 
-from fabrictestbed_extensions.fablib.fablib import fablib
-
 from tests.base_test import BaseTest
 
 
@@ -36,7 +34,7 @@ class ModifySliceTest(BaseTest):
         super(ModifySliceTest, self).setUp()
 
     def test_slice(self):
-        [site1, site2, site3] = fablib.get_random_sites(count=3)
+        [site1, site2, site3] = self._fablib.get_random_sites(count=3)
 
         print(f"Sites: {site1}, {site2}, {site3}")
 

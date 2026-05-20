@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 from tests.acceptance.utils import error_message
-from tests.base_test import fabric_rc, fim_lock
+from tests.base_test import fabric_rc, fim_lock, _validate_ip, _safe_devname
 
 
 NIC_MODEL = 'NIC_Basic'
@@ -160,11 +160,11 @@ def test_fabnetv4_sharednic_ping(fablib):
             iface1 = node1.get_interface(network_name="fabnetv4-net1")
             iface2 = node2.get_interface(network_name="fabnetv4-net2")
 
-            ip1 = iface1.get_ip_addr()
-            ip2 = iface2.get_ip_addr()
+            ip1 = _validate_ip(iface1.get_ip_addr())
+            ip2 = _validate_ip(iface2.get_ip_addr())
 
-            node1.execute(f"ip addr show {iface1.get_os_interface()}")
-            node2.execute(f"ip addr show {iface2.get_os_interface()}")
+            node1.execute(f"ip addr show {_safe_devname(iface1.get_device_name())}")
+            node2.execute(f"ip addr show {_safe_devname(iface2.get_device_name())}")
 
             ping_out1, _ = node1.execute(f"ping -c 5 {ip2}")
             ping_out2, _ = node2.execute(f"ping -c 5 {ip1}")

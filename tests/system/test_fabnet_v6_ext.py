@@ -34,7 +34,7 @@
 # SOFTWARE.
 # Author: Komal Thareja (kthare10@renci.org)
 
-from tests.base_test import BaseTest
+from tests.base_test import BaseTest, _validate_ip, _safe_devname
 
 
 class FabNetv6ExtSliceTest(BaseTest):
@@ -115,11 +115,11 @@ class FabNetv6ExtSliceTest(BaseTest):
         # Add route to external network
         # Please be careful when configuring routes using external network. Do not make these routes default to avoid loosing connections to management network destinations.
         stdout, stderr = node1.execute(
-            f'sudo ip route add {external_network_subnet} via {network1.get_gateway()} dev {node1_iface.get_device_name()}')
+            f'sudo ip route add {external_network_subnet} via {_validate_ip(network1.get_gateway())} dev {_safe_devname(node1_iface.get_device_name())}')
 
         self.assertEqual("", stderr, "sudo ip route add failed")
 
-        stdout, stderr = node1.execute(f'sudo ip addr show {node1_iface.get_device_name()}')
+        stdout, stderr = node1.execute(f'sudo ip addr show {_safe_devname(node1_iface.get_device_name())}')
         self.assertEqual("", stderr, "sudo ip addr show failed")
 
         stdout, stderr = node1.execute(f'sudo ip -6 route list')
@@ -133,10 +133,10 @@ class FabNetv6ExtSliceTest(BaseTest):
 
         # Add route to external network
         stdout, stderr = node2.execute(
-            f'sudo ip route add {external_network_subnet} via {network2.get_gateway()} dev {node2_iface.get_device_name()}')
+            f'sudo ip route add {external_network_subnet} via {_validate_ip(network2.get_gateway())} dev {_safe_devname(node2_iface.get_device_name())}')
         self.assertEqual("", stderr)
 
-        stdout, stderr = node2.execute(f'sudo ip addr show {node2_iface.get_device_name()}')
+        stdout, stderr = node2.execute(f'sudo ip addr show {_safe_devname(node2_iface.get_device_name())}')
         self.assertEqual("", stderr, "sudo ip addr show failed")
 
         stdout, stderr = node2.execute(f'sudo ip -6 route list')
@@ -144,11 +144,11 @@ class FabNetv6ExtSliceTest(BaseTest):
 
         # VERIFICATION
         # Verify external connectivity
-        stdout, stderr = node1.execute(f'sudo ping -c 5 -I {node1_iface.get_device_name()} bing.com')
+        stdout, stderr = node1.execute(f'sudo ping -c 5 -I {_safe_devname(node1_iface.get_device_name())} bing.com')
         self.assertTrue("5 packets transmitted, 5 received" in stdout)
         self.assertEqual("", stderr, "ping failed")
 
-        stdout, stderr = node1.execute(f'sudo ping -c 5 -I {node2_iface.get_device_name()} bing.com')
+        stdout, stderr = node1.execute(f'sudo ping -c 5 -I {_safe_devname(node2_iface.get_device_name())} bing.com')
         self.assertTrue("5 packets transmitted, 5 received" in stdout)
         self.assertEqual("", stderr, "ping failed")
         # VERIFICATION

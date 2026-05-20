@@ -23,6 +23,8 @@
 # SOFTWARE.
 import ipaddress
 import os
+import re
+import shlex
 import socket
 import time
 import unittest
@@ -33,6 +35,22 @@ from fabrictestbed_extensions.fablib.node import Node
 from threading import Lock
 
 fim_lock = Lock()
+
+_DEVNAME_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
+
+
+def _validate_ip(addr_str):
+    """Validate and return a string IP address. Raises ValueError on bad input."""
+    return str(ipaddress.ip_address(str(addr_str)))
+
+
+def _safe_devname(name):
+    """Validate a device name and return it shell-quoted. Raises ValueError on bad input."""
+    name = str(name)
+    if not _DEVNAME_RE.match(name):
+        raise ValueError(f"Invalid device name: {name!r}")
+    return shlex.quote(name)
+
 
 DEBUG = False
 if not DEBUG:
@@ -82,7 +100,7 @@ class BaseTest(unittest.TestCase):
         self.assertIsNotNone(node2)
         node1 = self._slice.get_node(node1.get_name())
         node2 = self._slice.get_node(node2.get_name())
-        node2_address = node2.get_interface(network_name=network_name).get_ip_addr()
+        node2_address = _validate_ip(node2.get_interface(network_name=network_name).get_ip_addr())
         self.assertIsNotNone(node2_address)
         stdout, stderr = node1.execute(f'ping -c 5 {node2_address}')
         self.assertTrue("5 packets transmitted, 5 received" in stdout, "ping failed")
