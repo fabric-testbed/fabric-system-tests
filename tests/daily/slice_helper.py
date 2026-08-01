@@ -104,11 +104,12 @@ def create_site_worker_slices(fablib, sites):
                 continue
             if site.get("state") in avoid:
                 continue
-            site_obj = fablib.get_resources().get_site(site["name"])
-            for h in site_obj.get_hosts().values():
-                if h.get_state() != "Active":
+            # ResourcesV2: hosts are exposed via get_hosts_by_site() as
+            # {host_name: host_dict}
+            for h in fablib.get_resources().get_hosts_by_site(site["name"]).values():
+                if h.get("state") != "Active":
                     continue
-                f = executor.submit(create_slice, site, h.get_name())
+                f = executor.submit(create_slice, site, h.get("name"))
                 futures[f] = (site, h)
 
         for future in as_completed(futures):
