@@ -107,7 +107,7 @@ def test_fabnetv6_sharednic_ping(fablib):
                 traceback.print_exc()
                 results[site_name] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e)
+                    "error": str(e)
                 }
 
     wait_and_configure_slices(slice_objects)
