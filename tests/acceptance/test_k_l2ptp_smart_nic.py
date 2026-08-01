@@ -42,6 +42,10 @@ NIC_MODELS = {
 NETWORK_NAME = 'l2-PTP'
 SUBNET = IPv4Network("192.168.1.0/24")
 MAX_PARALLEL_TESTS = 3
+# L2PTP endpoints on dedicated SmartNIC ports must be VLAN-tagged: the Net AM
+# builds an NSO point-to-point circuit and rejects untagged interfaces
+# ("must be tagged (with vlan label in 1..4095)")
+VLAN_ID = "100"
 
 
 @pytest.fixture(scope="module")
@@ -72,11 +76,13 @@ def create_l2ptp_slice(site1, site2, nic_model):
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface1 = node1.add_component(model=nic_model, name="nic1").get_interfaces()[0]
         iface1.set_mode("auto")
+        iface1.set_vlan(VLAN_ID)
 
         node2 = slice_obj.add_node(name="node2", site=site2,
                                    cores=VM_CONFIG["cores"], ram=VM_CONFIG["ram"], disk=VM_CONFIG["disk"])
         iface2 = node2.add_component(model=nic_model, name="nic2").get_interfaces()[0]
         iface2.set_mode("auto")
+        iface2.set_vlan(VLAN_ID)
 
         slice_obj.add_l2network(name=NETWORK_NAME, interfaces=[iface1, iface2], type='L2PTP', subnet=SUBNET)
         slice_obj.submit(wait=False)
@@ -126,8 +132,8 @@ def test_smartnic_l2ptp_across_sites(fablib):
                 traceback.print_exc()
                 results[key] = {
                     "state": False,
-                    "error": error_message(slice_obj=slice_obj, exception=e),
-                    "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"
+                    "error": str(e),
+                    "slice_id": key
                 }
 
     wait_and_configure_slices(slice_objects)
