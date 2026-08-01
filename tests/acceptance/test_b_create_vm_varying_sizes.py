@@ -67,14 +67,15 @@ def create_and_submit_slice(site):
 
         print(f"[{site_name}] Creating slice: {slice_name}")
         slice_obj = fablib.new_slice(name=slice_name)
-        site_obj = fablib.get_resources().get_site(site_name)
-        for h in site_obj.get_hosts().values():
-            if h.get_state() != "Active":
+        # ResourcesV2: get_site() returns a plain dict; hosts are exposed via
+        # get_hosts_by_site() as {host_name: host_dict}
+        for h in fablib.get_resources().get_hosts_by_site(site_name).values():
+            if h.get("state") != "Active":
                 continue
             slice_obj.add_node(
-                name=h.get_name(),
+                name=h.get("name"),
                 site=site_name,
-                host=h.get_name(),
+                host=h.get("name"),
                 cores=VM_CONFIG["cores"],
                 ram=VM_CONFIG["ram"],
                 disk=VM_CONFIG["disk"]
@@ -110,9 +111,11 @@ def test_non_blocking_vm_creation(fablib):
             except Exception as e:
                 print(f"[{site_name}] Error submitting slice: {e}")
                 traceback.print_exc()
+                # create_and_submit_slice raised, so no slice object exists for
+                # this site; record the failure without referencing one
                 results[site_name] = {"state": False,
-                                      "error": error_message(slice_obj=slice_obj, exception=e),
-                                      "slice_id": f"{slice_obj.get_name()}/{slice_obj.get_slice_id()}"}
+                                      "error": str(e),
+                                      "slice_id": site_name}
 
     wait_and_configure_slices(slice_objects)
 
