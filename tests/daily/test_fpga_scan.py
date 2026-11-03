@@ -287,6 +287,17 @@ def scan_fpga_inventory(fablib):
     return apply_shell_cache(records)
 
 
+def collapse(exc, limit=1200):
+    """One-line form of an exception, kept long enough to carry the reason.
+
+    The useful part of a playbook or priming failure sits at the END of the
+    message ("Playbook has failed tasks: ..."), so a short cap throws away
+    exactly what is worth reading.
+    """
+    text = ' '.join(str(exc).split()) or repr(exc)
+    return text[:limit]
+
+
 def shell_column(record):
     """One line saying what a card carries and how current the reading is."""
     source = record.get('shell_source') or 'none'
@@ -299,15 +310,21 @@ def shell_column(record):
         when = 'today'
     else:
         when = f'{age} day(s) ago'
-    name = record.get('shell_name') or record.get('shell_class') or 'unknown'
+    shell_class = record.get('shell_class') or 'unknown'
+    name = record.get('shell_name') or ''
+    label = f'{shell_class} {name}'.strip()
     ids = record.get('pci_ids') or 'no pci function'
     binds = record.get('binds_with') or 'none'
     stale = ' [STALE]' if source == 'cache-stale' else ''
-    line = (f"{record.get('shell_class', '')} {name} [{ids}] "
-            f"binds_with={binds} -- observed {when}{stale}")
+    line = f'{label} [{ids}] binds_with={binds} -- observed {when}{stale}'
     note = record.get('shell_note')
     if note:
         line = f'{line}\n        note: {note}'
+    # The rescan outcome explains an empty reading, so it belongs in the
+    # report rather than only in the JSON.
+    rescan = record.get('shell_rescan')
+    if rescan and rescan != 'not needed':
+        line = f'{line}\n        pci rescan: {rescan}'
     return line
 
 
@@ -478,7 +495,7 @@ def apply_shell_cache(records):
             record.update({
                 'shell_source': 'none', 'shell_class': '', 'shell_name': '',
                 'binds_with': '', 'pci_ids': '', 'shell_observed_at': '',
-                'shell_age_days': '',
+                'shell_age_days': '', 'shell_rescan': '',
                 'shell_note': 'shell never observed; run with FPGA_SCAN_LAUNCH=TRUE '
                               'to find out what this card carries',
             })
@@ -499,18 +516,43 @@ def apply_shell_cache(records):
             'shell_observed_at': entry.get('observed_at', ''),
             'shell_age_days': age,
             'shell_note': note,
+            'shell_rescan': entry.get('rescan', ''),
         })
     return records
 
 
-def read_card_state(node):
+def read_card_state(node, component_name='fpga1'):
+    """Read the card, rescanning the PCI bus once if nothing shows up.
+
+    An attached FPGA frequently does not appear on the guest's PCI bus until a
+    rescan, so reporting it absent on the first empty lspci calls a card
+    missing when it is merely not yet enumerated. The rescan is deliberately
+    tied to an empty result and to no other condition.
+    """
+    facts = probe_card(node)
+    if facts['accelerators']:
+        return facts
+    try:
+        node.rescan_pci(component_name=component_name)
+    except Exception as e:
+        facts['rescan'] = f'rescan unavailable: {collapse(e)}'
+        return facts
+    second = probe_card(node)
+    if second['accelerators']:
+        second['rescan'] = 'card appeared only after a PCI rescan'
+        return second
+    second['rescan'] = 'rescan completed and the card is still absent'
+    return second
+
+
+def probe_card(node):
     """Collect what the VM can see about its FPGA, without judging it.
 
     Descriptive on purpose: device ids, classes and bound drivers are reported
-    verbatim rather than graded, because whether a card is 'usable' depends on
+    verbatim rather than graded, because whether a card is usable depends on
     the runtime a given experiment brings with it.
     """
-    facts = {}
+    facts = {'rescan': 'not needed'}
     node.execute('sudo apt-get install -y -qq pciutils || sudo dnf install -q -y pciutils',
                  quiet=True)
     stdout, _stderr = node.execute('lspci -nn', quiet=True)
@@ -570,9 +612,8 @@ def delete_probe_slice(slice_obj, slice_name, passed):
             print(f"[{slice_name}] deleted")
             return
         except Exception as e:
-            first_line = str(e).strip().splitlines()[0] if str(e).strip() else repr(e)
             print(f"[{slice_name}] delete attempt {attempt}/{DELETE_RETRIES} "
-                  f"failed: {first_line[:160]}")
+                  f"failed: {collapse(e)}")
             if attempt < DELETE_RETRIES:
                 time.sleep(DELETE_RETRY_WAIT)
     print(f"[{slice_name}] STILL NOT DELETED after {DELETE_RETRIES} attempts -- "
@@ -618,9 +659,12 @@ def launch_probe(fablib, record):
         node = slice_obj.get_node(name=PROBE_NODE)
         card = read_card_state(node)
         shell = identify_shell(card)
+        shell['rescan'] = card.get('rescan', '')
         record_shell_observation(record, shell)
         print(f"[{short_host}] VM launched; {len(card['accelerators'])} accelerator "
               f"function(s) visible")
+        if shell['rescan'] and shell['rescan'] != 'not needed':
+            print(f"[{short_host}] pci rescan: {shell['rescan']}")
         print(f"[{short_host}] shell: {shell['shell_class']} "
               f"{shell['shell_name']} [{shell['pci_ids'] or 'no pci function'}] "
               f"binds_with={shell['binds_with'] or 'none'}")
