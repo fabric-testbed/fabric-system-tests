@@ -53,6 +53,9 @@ Both forms run from the repo root. Environment:
     FPGA_SCAN_LAUNCH           TRUE to provision a probe VM per host, default FALSE
     FPGA_SCAN_LAUNCH_MAX_HOSTS upper bound on probe VMs, default 1
     FPGA_SCAN_KEEP_FAILED      TRUE to keep a failed probe slice for inspection
+    FPGA_SCAN_SUBMIT_TIMEOUT   seconds to wait for a probe slice, default 1800
+    FPGA_SCAN_DELETE_RETRIES   delete attempts per slice, default 10
+    FPGA_SCAN_SHELL_CACHE_DAYS age at which a shell reading is stale, default 30
 """
 
 import calendar
@@ -122,6 +125,13 @@ SCAN_SITES = [s for s in os.getenv('FPGA_SCAN_SITES', '').replace(',', ' ').spli
 LAUNCH_ENABLED = os.getenv('FPGA_SCAN_LAUNCH', 'FALSE').upper() == 'TRUE'
 LAUNCH_MAX_HOSTS = int(os.getenv('FPGA_SCAN_LAUNCH_MAX_HOSTS', '1'))
 KEEP_FAILED = os.getenv('FPGA_SCAN_KEEP_FAILED', 'FALSE').upper() == 'TRUE'
+
+# Passed to submit() explicitly rather than inherited silently: a card that
+# never leaves Configuring otherwise burns fablib's full 1800s default before
+# a daily job learns anything.
+SUBMIT_TIMEOUT = int(os.getenv('FPGA_SCAN_SUBMIT_TIMEOUT', '1800'))
+DELETE_RETRIES = int(os.getenv('FPGA_SCAN_DELETE_RETRIES', '10'))
+DELETE_RETRY_WAIT = int(os.getenv('FPGA_SCAN_DELETE_RETRY_WAIT', '30'))
 
 VERDICT_HELP = {
     'AVAILABLE': 'a card is free and the worker has room for an FPGA VM',
@@ -548,11 +558,25 @@ def delete_probe_slice(slice_obj, slice_name, passed):
     if not passed and KEEP_FAILED:
         print(f"[{slice_name}] keeping failed slice for inspection")
         return
-    try:
-        print(f"[{slice_name}] deleting probe slice and releasing the card")
-        slice_obj.delete()
-    except Exception as e:
-        print(f"[{slice_name}] delete failed: {e}")
+    # A slice that never left Configuring cannot be deleted yet -- the
+    # orchestrator answers "Unable to delete Slices that are not yet stable,
+    # try again later" -- so one attempt is not enough. Giving up here leaks a
+    # slice holding one of very few cards, which is the thing this function
+    # exists to prevent.
+    print(f"[{slice_name}] deleting probe slice and releasing the card")
+    for attempt in range(1, DELETE_RETRIES + 1):
+        try:
+            slice_obj.delete()
+            print(f"[{slice_name}] deleted")
+            return
+        except Exception as e:
+            first_line = str(e).strip().splitlines()[0] if str(e).strip() else repr(e)
+            print(f"[{slice_name}] delete attempt {attempt}/{DELETE_RETRIES} "
+                  f"failed: {first_line[:160]}")
+            if attempt < DELETE_RETRIES:
+                time.sleep(DELETE_RETRY_WAIT)
+    print(f"[{slice_name}] STILL NOT DELETED after {DELETE_RETRIES} attempts -- "
+          f"this slice may be holding an FPGA; delete it by hand")
 
 
 def launch_probe(fablib, record):
@@ -578,7 +602,7 @@ def launch_probe(fablib, record):
                                   image=PROBE_IMAGE)
         node.add_component(model=model, name='fpga1')
         print(f"[{short_host}] submitting {slice_name} with {model}")
-        slice_obj.submit()
+        slice_obj.submit(wait_timeout=SUBMIT_TIMEOUT)
         slice_obj.update()
         state = str(slice_obj.get_state())
         if state != 'StableOK':
