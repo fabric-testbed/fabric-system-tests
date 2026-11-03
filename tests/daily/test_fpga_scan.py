@@ -55,7 +55,10 @@ Both forms run from the repo root. Environment:
     FPGA_SCAN_KEEP_FAILED      TRUE to keep a failed probe slice for inspection
 """
 
+import calendar
+import json
 import os
+import re
 import time
 import traceback
 
@@ -79,11 +82,41 @@ PROBE_DISK = 50
 PROBE_IMAGE = 'default_ubuntu_22'
 PROBE_NODE = 'fpga-probe'
 
-# Vendor ids used only to label lspci output, never to grade a card.
+# Vendor ids used to label lspci output.
 PCI_VENDORS = {'10ee': 'Xilinx/AMD', '1172': 'Altera/Intel'}
+
+# What a card currently carries is decided by its PCI device id, and reading it
+# is cheap. This names the shell and the driver that binds that state; it is not
+# a usability grade, because whether a card is usable depends on the runtime a
+# given experiment brings. An id absent from this table is reported verbatim as
+# unrecognised rather than guessed at or silently dropped.
+SHELL_IDS = {
+    '10ee:903f': ('network-shell', 'OpenNIC / ESnet network shell', 'xdma (dma_ip_drivers)'),
+    '10ee:913f': ('network-shell', 'ESnet SmartNIC second PF', 'xdma (dma_ip_drivers)'),
+    '10ee:d00c': ('golden', 'Alveo golden (factory/recovery) image', 'management only'),
+    '10ee:500c': ('xrt-xdma', 'xilinx_u280_gen3x16_xdma_base_1', 'xocl / XRT'),
+    '10ee:500d': ('xrt-xdma', 'xilinx_u280_gen3x16_xdma_base_1 (mgmt PF)', 'xclmgmt / XRT'),
+}
+
+SHELL_HELP = {
+    'xrt-xdma': 'XRT XDMA deployment shell; xocl binds it and an xclbin can load',
+    'xrt-xdma-no-metadata': 'XRT shell on the bus but the UUID ROM reads 0; xocl will not probe it',
+    'golden': 'factory/recovery image, management only; flash a deployment shell to use it',
+    'golden-erased': 'golden with an erased version field; cannot be flashed over PCIe',
+    'network-shell': 'OpenNIC/ESnet network design; XRT never binds it, xdma does',
+    'unrecognised': 'a PCI function is present whose device id is not in this table',
+    'none': 'no accelerator PCI function was visible inside the VM',
+}
 
 INVENTORY_JSON = 'fpga_scan.json'
 LAUNCH_JSON = 'fpga_launch.json'
+SHELL_CACHE_JSON = 'fpga_shell_cache.json'
+
+# An inventory pass cannot see a shell -- that needs a VM on the worker -- so
+# observations are cached and reported with their age. Older than this and the
+# reading is labelled stale rather than presented as current.
+SHELL_CACHE_DAYS = int(os.getenv('FPGA_SCAN_SHELL_CACHE_DAYS', '30'))
+TIME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
 SCAN_SITES = [s for s in os.getenv('FPGA_SCAN_SITES', '').replace(',', ' ').split() if s]
 LAUNCH_ENABLED = os.getenv('FPGA_SCAN_LAUNCH', 'FALSE').upper() == 'TRUE'
@@ -241,7 +274,31 @@ def scan_fpga_inventory(fablib):
                     'verdict': verdict,
                     'reason': reason,
                 })
-    return records
+    return apply_shell_cache(records)
+
+
+def shell_column(record):
+    """One line saying what a card carries and how current the reading is."""
+    source = record.get('shell_source') or 'none'
+    if source == 'none':
+        return 'not observed -- needs a VM on this worker to read the card'
+    age = record.get('shell_age_days')
+    if age == '' or age is None:
+        when = 'at an unknown time'
+    elif age == 0:
+        when = 'today'
+    else:
+        when = f'{age} day(s) ago'
+    name = record.get('shell_name') or record.get('shell_class') or 'unknown'
+    ids = record.get('pci_ids') or 'no pci function'
+    binds = record.get('binds_with') or 'none'
+    stale = ' [STALE]' if source == 'cache-stale' else ''
+    line = (f"{record.get('shell_class', '')} {name} [{ids}] "
+            f"binds_with={binds} -- observed {when}{stale}")
+    note = record.get('shell_note')
+    if note:
+        line = f'{line}\n        note: {note}'
+    return line
 
 
 def print_inventory_summary(records):
@@ -262,6 +319,7 @@ def print_inventory_summary(records):
                   f"{r['fpga_available']:>2}/{r['fpga_capacity']:<2} "
                   f"cores={r['cores_available']:<4} ram={r['ram_available']:<4} "
                   f"disk={r['disk_available']:<4} {r['verdict']} - {r['reason']}")
+            print(f"      shell: {shell_column(r)}")
     verdicts = {}
     for r in records:
         verdicts[r['verdict']] = verdicts.get(r['verdict'], 0) + 1
@@ -274,8 +332,165 @@ def print_inventory_summary(records):
     print('  BY STATE: ' + ',  '.join(f'{v}={n}' for v, n in counted))
     for verdict, _ in counted:
         print(f"    {verdict:<14} {VERDICT_HELP[verdict]}")
+    shells = {}
+    for r in records:
+        key = r.get('shell_class') or 'not-observed'
+        shells[key] = shells.get(key, 0) + 1
+    print('  BY SHELL: ' + ',  '.join(f'{k}={n}' for k, n in sorted(shells.items())))
+    for key in sorted(shells):
+        if key in SHELL_HELP:
+            print(f"    {key:<22} {SHELL_HELP[key]}")
+        else:
+            print(f"    {key:<22} no VM has yet reported what this card carries")
     models = sorted({r['model'] for r in records})
     print(f"  MODELS DISCOVERED: {', '.join(models)}")
+
+
+def identify_shell(facts):
+    """Name the shell a card currently carries, from the PCI ids it exposes.
+
+    Returns pci_ids, shell_class, shell_name, binds_with and a note. This
+    describes the card's state and which driver claims it; it deliberately
+    stops short of declaring the card good or bad.
+    """
+    text = '\n'.join(facts.get('accelerators') or [])
+    tools = facts.get('vendor_tool') or ''
+    pairs = re.findall(r'\[([0-9a-fA-F]{4}):([0-9a-fA-F]{4})\]', text)
+    ids = sorted({f'{v.lower()}:{d.lower()}' for v, d in pairs
+                  if v.lower() in PCI_VENDORS})
+    pci_ids = ' '.join(ids)
+
+    if not ids:
+        return {'pci_ids': '', 'shell_class': 'none', 'shell_name': '',
+                'binds_with': '',
+                'shell_note': 'the component is advertised but no accelerator PCI '
+                              'function is visible in the VM'}
+
+    devices = {i.split(':')[1] for i in ids if i in SHELL_IDS}
+    if not devices:
+        return {'pci_ids': pci_ids, 'shell_class': 'unrecognised', 'shell_name': '',
+                'binds_with': '',
+                'shell_note': f"device id(s) {pci_ids} are not in this scan's shell table"}
+
+    # Order matters: a card can expose an XRT PF and a management PF at once,
+    # and the deployment shell is the more specific answer.
+    if {'500c', '500d'} & devices:
+        shell_class, shell_name, binds = SHELL_IDS['10ee:500c']
+        note = ''
+        # A JTAG flash writes the bitstream but not the metadata xbmgmt
+        # persists, which carries the UUID ROM. The card then looks healthy on
+        # the bus and xocl still refuses to probe it.
+        if re.search(r'Logic UUID\s*:?\s*0x0\b', tools, re.I):
+            shell_class = 'xrt-xdma-no-metadata'
+            shell_name = f'{shell_name} (UUID 0)'
+            binds = 'none'
+            note = 'UUID ROM reads 0; not repairable with xbmgmt program --base'
+        elif not tools:
+            note = ('named from the PCI id alone; no vendor tool present in the VM to '
+                    'confirm the UUID ROM')
+        return {'pci_ids': pci_ids, 'shell_class': shell_class, 'shell_name': shell_name,
+                'binds_with': binds, 'shell_note': note}
+
+    if 'd00c' in devices:
+        shell_class, shell_name, binds = SHELL_IDS['10ee:d00c']
+        # An erased version field reads as 0xFFFFFFFF. Note the string
+        # "Factory or Recovery image detected" appears on healthy cards too and
+        # is not the signal here.
+        if 'GOLDEN_4294967295' in tools:
+            return {'pci_ids': pci_ids, 'shell_class': 'golden-erased',
+                    'shell_name': 'GOLDEN_4294967295', 'binds_with': binds,
+                    'shell_note': 'golden version field is erased; flashing over PCIe '
+                                  'will fail and the card needs staff intervention'}
+        return {'pci_ids': pci_ids, 'shell_class': shell_class, 'shell_name': shell_name,
+                'binds_with': binds,
+                'shell_note': 'flash a deployment shell to make the card loadable'}
+
+    if {'903f', '913f'} & devices:
+        # Function count separates the two network designs. A lone 903f is a
+        # healthy OpenNIC card, not a half-restored one.
+        if {'903f', '913f'} <= devices:
+            shell_name = 'ESnet SmartNIC (903f + 913f)'
+            note = 'two PFs means the ESnet SmartNIC design'
+        else:
+            shell_name = 'OpenNIC (903f)'
+            note = 'a lone 903f is a healthy OpenNIC card, not a half-restored one'
+        return {'pci_ids': pci_ids, 'shell_class': 'network-shell', 'shell_name': shell_name,
+                'binds_with': SHELL_IDS['10ee:903f'][2], 'shell_note': note}
+
+    return {'pci_ids': pci_ids, 'shell_class': 'unrecognised', 'shell_name': '',
+            'binds_with': '',
+            'shell_note': f"device id(s) {pci_ids} are not in this scan's shell table"}
+
+
+def cache_key(record):
+    return f"{record['site']}/{record['host']}/{record['model']}"
+
+
+def read_shell_cache():
+    try:
+        with open(SHELL_CACHE_JSON) as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def record_shell_observation(record, shell):
+    """Persist one shell reading so later inventory passes can report it."""
+    cache = read_shell_cache()
+    entry = dict(shell)
+    entry['observed_at'] = time.strftime(TIME_FORMAT, time.gmtime())
+    cache[cache_key(record)] = entry
+    with open(SHELL_CACHE_JSON, 'w') as handle:
+        json.dump(cache, handle, indent=2, sort_keys=True)
+    return entry
+
+
+def shell_age_days(observed_at):
+    """Whole days since an observation, or '' if the stamp is unreadable."""
+    try:
+        stamp = calendar.timegm(time.strptime(observed_at, TIME_FORMAT))
+    except (TypeError, ValueError):
+        return ''
+    return max(0, int((time.time() - stamp) // 86400))
+
+
+def apply_shell_cache(records):
+    """Carry the last observed shell into an inventory report.
+
+    An inventory pass cannot see a shell: it is only visible from inside a VM
+    on that worker. So each record reports the most recent reading and its age,
+    and a card that has never been probed says so rather than being guessed at.
+    """
+    cache = read_shell_cache()
+    for record in records:
+        entry = cache.get(cache_key(record))
+        if not entry:
+            record.update({
+                'shell_source': 'none', 'shell_class': '', 'shell_name': '',
+                'binds_with': '', 'pci_ids': '', 'shell_observed_at': '',
+                'shell_age_days': '',
+                'shell_note': 'shell never observed; run with FPGA_SCAN_LAUNCH=TRUE '
+                              'to find out what this card carries',
+            })
+            continue
+        age = shell_age_days(entry.get('observed_at', ''))
+        stale = age == '' or age > SHELL_CACHE_DAYS
+        note = entry.get('shell_note', '')
+        if stale:
+            detail = (f'observation is {age} day(s) old' if age != ''
+                      else 'observation timestamp could not be read')
+            note = (note + ' | ' if note else '') + detail
+        record.update({
+            'shell_source': 'cache-stale' if stale else 'cache',
+            'shell_class': entry.get('shell_class', ''),
+            'shell_name': entry.get('shell_name', ''),
+            'binds_with': entry.get('binds_with', ''),
+            'pci_ids': entry.get('pci_ids', ''),
+            'shell_observed_at': entry.get('observed_at', ''),
+            'shell_age_days': age,
+            'shell_note': note,
+        })
+    return records
 
 
 def read_card_state(node):
@@ -305,7 +520,11 @@ def read_card_state(node):
     # grepping for either string under-reports on the other version.
     stdout, _stderr = node.execute(
         'command -v xbutil >/dev/null && xbutil examine 2>&1 || true', quiet=True)
-    facts['vendor_tool'] = (stdout or '').strip()[:4000]
+    tools = (stdout or '').strip()
+    # xbmgmt is what reports an erased golden version field.
+    stdout, _stderr = node.execute(
+        'command -v xbmgmt >/dev/null && sudo xbmgmt examine 2>&1 || true', quiet=True)
+    facts['vendor_tool'] = (tools + '\n' + (stdout or '').strip()).strip()[:6000]
     return facts
 
 
@@ -365,7 +584,8 @@ def launch_probe(fablib, record):
         if state != 'StableOK':
             return {'state': False, 'launched': False,
                     'error': f"slice state {state}: {error_message(slice_obj=slice_obj)}",
-                    'slice_id': slice_id(slice_obj, slice_name), 'card': {}}
+                    'slice_id': slice_id(slice_obj, slice_name),
+                    'shell': {}, 'card': {}}
         placed = True
         slice_obj.wait_ssh(progress=False)
         # Handles built before submit() are stale descriptors; the live ones
@@ -373,17 +593,25 @@ def launch_probe(fablib, record):
         slice_obj = fablib.get_slice(name=slice_name)
         node = slice_obj.get_node(name=PROBE_NODE)
         card = read_card_state(node)
+        shell = identify_shell(card)
+        record_shell_observation(record, shell)
         print(f"[{short_host}] VM launched; {len(card['accelerators'])} accelerator "
-              f"function(s) visible in the VM")
+              f"function(s) visible")
+        print(f"[{short_host}] shell: {shell['shell_class']} "
+              f"{shell['shell_name']} [{shell['pci_ids'] or 'no pci function'}] "
+              f"binds_with={shell['binds_with'] or 'none'}")
+        if shell['shell_note']:
+            print(f"[{short_host}] note: {shell['shell_note']}")
         return {'state': True, 'launched': True, 'error': '',
-                'slice_id': slice_id(slice_obj, slice_name), 'card': card}
+                'slice_id': slice_id(slice_obj, slice_name),
+                'shell': shell, 'card': card}
     except Exception as e:
         print(f"[{short_host}] {'probe' if placed else 'launch'} failed: {e}")
         traceback.print_exc()
         message = error_message(slice_obj=slice_obj, exception=e) if slice_obj else str(e)
         return {'state': False, 'launched': placed, 'error': message,
                 'slice_id': slice_id(slice_obj, slice_name) if slice_obj else slice_name,
-                'card': {}}
+                'shell': {}, 'card': {}}
     finally:
         delete_probe_slice(slice_obj, slice_name, placed)
 
