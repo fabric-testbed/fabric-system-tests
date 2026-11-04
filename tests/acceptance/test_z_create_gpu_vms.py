@@ -114,7 +114,7 @@ def test_create_gpu_vms_per_site(fablib):
                 slice_obj = future.result()
                 slice_objects[site_name_gpu_model] = slice_obj
             except Exception as e:
-                print(f"[{site_name}] Error submitting slice: {e}")
+                print(f"[{site_name_gpu_model}] Error submitting slice: {e}")
                 traceback.print_exc()
                 results[site_name_gpu_model] = {
                     "state": False,
@@ -127,7 +127,7 @@ def test_create_gpu_vms_per_site(fablib):
     # Wait for all slices to complete provisioning
     for site_name_gpu_model, slice_obj in slice_objects.items():
         success = slice_obj.get_state() in ["StableOK", "StableError"]
-        results[site_name] = {
+        results[site_name_gpu_model] = {
             "state": success,
             "error": ""
         }
@@ -137,11 +137,15 @@ def test_create_gpu_vms_per_site(fablib):
                 node = slice_obj.get_node("gpu-node")
                 slice_name = slice_obj.get_name()
                 print(f"[{slice_name}] Checking GPU via lspci...")
-                cmd = "sudo dnf install -y -q pciutils && lspci | grep -i 'NVIDIA|3D controller'"
+                # image is default_ubuntu_24: use apt, not dnf; grep needs -E
+                # for alternation. The T4 shows as a "3D controller" but the
+                # RTX6000 is a "VGA compatible controller", so match on NVIDIA
+                cmd = "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q pciutils > /dev/null 2>&1; " \
+                      "lspci | grep -Ei 'NVIDIA|3D controller'"
                 stdout, stderr = node.execute(cmd)
-                if not('NVIDIA' in stdout and '3D controller' in stdout):
+                if 'NVIDIA' not in stdout:
                     raise Exception("GPU not detected")
-                results[site_name] = {
+                results[site_name_gpu_model] = {
                     "state": True,
                     "error": ""
                 }
